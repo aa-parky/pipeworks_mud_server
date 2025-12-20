@@ -10,34 +10,73 @@ import os
 SERVER_URL = os.getenv("MUD_SERVER_URL", "http://localhost:8000")
 
 # Global state
-session_data = {"session_id": None, "username": None, "logged_in": False}
+session_data = {"session_id": None, "username": None, "role": None, "logged_in": False}
 
 
-def login(username: str) -> Tuple[str, str, bool]:
-    """Handle login."""
+def login(username: str, password: str) -> Tuple[str, str, str, bool]:
+    """Handle login with password."""
     if not username or len(username.strip()) < 2:
-        return "Username must be at least 2 characters.", "", False
+        return "Username must be at least 2 characters.", "", "", False
+
+    if not password:
+        return "Password is required.", "", "", False
 
     try:
         response = requests.post(
-            f"{SERVER_URL}/login", json={"username": username.strip()}
+            f"{SERVER_URL}/login",
+            json={"username": username.strip(), "password": password},
         )
 
         if response.status_code == 200:
             data = response.json()
             session_data["session_id"] = data["session_id"]
             session_data["username"] = username.strip()
+            session_data["role"] = data.get("role", "player")
             session_data["logged_in"] = True
 
-            return data["message"], "", True
+            return data["message"], "", "", True
         else:
             error = response.json().get("detail", "Login failed")
-            return f"Login failed: {error}", "", False
+            return f"Login failed: {error}", "", "", False
 
     except requests.exceptions.ConnectionError:
-        return f"Cannot connect to server at {SERVER_URL}", "", False
+        return f"Cannot connect to server at {SERVER_URL}", "", "", False
     except Exception as e:
-        return f"Error: {str(e)}", "", False
+        return f"Error: {str(e)}", "", "", False
+
+
+def register(username: str, password: str, password_confirm: str) -> str:
+    """Handle user registration."""
+    if not username or len(username.strip()) < 2:
+        return "Username must be at least 2 characters."
+
+    if len(password) < 8:
+        return "Password must be at least 8 characters."
+
+    if password != password_confirm:
+        return "Passwords do not match."
+
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/register",
+            json={
+                "username": username.strip(),
+                "password": password,
+                "password_confirm": password_confirm,
+            },
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return f"✅ {data['message']}\n\nYou can now login with your credentials."
+        else:
+            error = response.json().get("detail", "Registration failed")
+            return f"Registration failed: {error}"
+
+    except requests.exceptions.ConnectionError:
+        return f"Cannot connect to server at {SERVER_URL}"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 
 def logout() -> Tuple[str, str, bool]:
@@ -123,9 +162,11 @@ def get_status() -> str:
 
         if response.status_code == 200:
             data = response.json()
+            role_display = session_data.get('role', 'player').capitalize()
             status = f"""
 [Player Status]
 Username: {session_data['username']}
+Role: {role_display}
 Current Room: {data['current_room']}
 Active Players: {', '.join(data['active_players']) if data['active_players'] else 'None'}
 
@@ -162,9 +203,16 @@ def create_interface():
             # Login Tab
             with gr.Tab("Login"):
                 with gr.Column():
-                    username_input = gr.Textbox(
+                    gr.Markdown("### Login to your account")
+                    login_username_input = gr.Textbox(
                         label="Username",
                         placeholder="Enter your username",
+                        max_lines=1,
+                    )
+                    login_password_input = gr.Textbox(
+                        label="Password",
+                        placeholder="Enter your password",
+                        type="password",
                         max_lines=1,
                     )
                     login_btn = gr.Button("Login", variant="primary")
@@ -174,8 +222,50 @@ def create_interface():
 
                     login_btn.click(
                         login,
-                        inputs=[username_input],
-                        outputs=[login_output, username_input, gr.State(False)],
+                        inputs=[login_username_input, login_password_input],
+                        outputs=[
+                            login_output,
+                            login_username_input,
+                            login_password_input,
+                            gr.State(False),
+                        ],
+                    )
+
+            # Register Tab
+            with gr.Tab("Register"):
+                with gr.Column():
+                    gr.Markdown("### Create a new account")
+                    gr.Markdown("*Default role: Player*")
+                    register_username_input = gr.Textbox(
+                        label="Username",
+                        placeholder="Choose a username (2-20 characters)",
+                        max_lines=1,
+                    )
+                    register_password_input = gr.Textbox(
+                        label="Password",
+                        placeholder="Enter password (min 8 characters)",
+                        type="password",
+                        max_lines=1,
+                    )
+                    register_password_confirm_input = gr.Textbox(
+                        label="Confirm Password",
+                        placeholder="Re-enter your password",
+                        type="password",
+                        max_lines=1,
+                    )
+                    register_btn = gr.Button("Register", variant="primary")
+                    register_output = gr.Textbox(
+                        label="Registration Status", interactive=False, lines=10
+                    )
+
+                    register_btn.click(
+                        register,
+                        inputs=[
+                            register_username_input,
+                            register_password_input,
+                            register_password_confirm_input,
+                        ],
+                        outputs=[register_output],
                     )
 
             # Game Tab

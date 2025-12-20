@@ -13,18 +13,23 @@ DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "mud.db"
 
 def init_database():
     """Initialize the SQLite database with required tables."""
+    from mud_server.api.password import hash_password
+
     conn = sqlite3.connect(str(DB_PATH))
     cursor = conn.cursor()
 
-    # Players table
+    # Players table with authentication fields
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS players (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'player',
             current_room TEXT NOT NULL DEFAULT 'spawn',
             inventory TEXT DEFAULT '[]',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP
+            last_login TIMESTAMP,
+            is_active INTEGER DEFAULT 1
         )
     """)
 
@@ -51,6 +56,29 @@ def init_database():
     """)
 
     conn.commit()
+
+    # Create default superuser if no players exist
+    cursor.execute("SELECT COUNT(*) FROM players")
+    player_count = cursor.fetchone()[0]
+
+    if player_count == 0:
+        default_password_hash = hash_password("admin123")
+        cursor.execute(
+            """
+            INSERT INTO players (username, password_hash, role, current_room)
+            VALUES (?, ?, ?, ?)
+        """,
+            ("admin", default_password_hash, "superuser", "spawn"),
+        )
+        conn.commit()
+        print("\n" + "=" * 60)
+        print("⚠️  DEFAULT SUPERUSER CREATED")
+        print("=" * 60)
+        print("Username: admin")
+        print("Password: admin123")
+        print("\n⚠️  IMPORTANT: Change this password immediately after first login!")
+        print("=" * 60 + "\n")
+
     conn.close()
 
 
@@ -60,13 +88,38 @@ def get_connection():
 
 
 def create_player(username: str) -> bool:
-    """Create a new player account."""
+    """
+    DEPRECATED: Use create_player_with_password instead.
+    This function is kept for backward compatibility but will fail
+    since password_hash is now required.
+    """
+    return False
+
+
+def create_player_with_password(username: str, password: str, role: str = "player") -> bool:
+    """
+    Create a new player account with password.
+
+    Args:
+        username: Unique username
+        password: Plain text password (will be hashed)
+        role: User role (player, worldbuilder, admin, superuser)
+
+    Returns:
+        True if player created successfully, False if username exists
+    """
+    from mud_server.api.password import hash_password
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
+        password_hash = hash_password(password)
         cursor.execute(
-            "INSERT INTO players (username, current_room) VALUES (?, ?)",
-            (username, "spawn"),
+            """
+            INSERT INTO players (username, password_hash, role, current_room)
+            VALUES (?, ?, ?, ?)
+        """,
+            (username, password_hash, role, "spawn"),
         )
         conn.commit()
         conn.close()
@@ -83,6 +136,149 @@ def player_exists(username: str) -> bool:
     result = cursor.fetchone()
     conn.close()
     return result is not None
+
+
+def verify_password_for_user(username: str, password: str) -> bool:
+    """
+    Verify a password for a user.
+
+    Args:
+        username: Username to check
+        password: Plain text password to verify
+
+    Returns:
+        True if password matches and user is active, False otherwise
+    """
+    from mud_server.api.password import verify_password
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT password_hash, is_active FROM players WHERE username = ?", (username,)
+    )
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        return False
+
+    password_hash, is_active = result
+    if not is_active:
+        return False
+
+    return verify_password(password, password_hash)
+
+
+def get_player_role(username: str) -> Optional[str]:
+    """Get the role of a player."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM players WHERE username = ?", (username,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
+
+
+def set_player_role(username: str, role: str) -> bool:
+    """Set the role of a player."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE players SET role = ? WHERE username = ?", (role, username)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_all_players() -> List[Dict[str, Any]]:
+    """Get list of all players with their details."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT username, role, created_at, last_login, is_active
+        FROM players
+        ORDER BY created_at DESC
+    """
+    )
+    results = cursor.fetchall()
+    conn.close()
+
+    players = []
+    for row in results:
+        players.append(
+            {
+                "username": row[0],
+                "role": row[1],
+                "created_at": row[2],
+                "last_login": row[3],
+                "is_active": bool(row[4]),
+            }
+        )
+    return players
+
+
+def deactivate_player(username: str) -> bool:
+    """Deactivate a player (ban)."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE players SET is_active = 0 WHERE username = ?", (username,)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def activate_player(username: str) -> bool:
+    """Activate a player (unban)."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE players SET is_active = 1 WHERE username = ?", (username,)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def change_password_for_user(username: str, new_password: str) -> bool:
+    """Change a user's password."""
+    from mud_server.api.password import hash_password
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        password_hash = hash_password(new_password)
+        cursor.execute(
+            "UPDATE players SET password_hash = ? WHERE username = ?",
+            (password_hash, username),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def is_player_active(username: str) -> bool:
+    """Check if a player is active (not banned)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT is_active FROM players WHERE username = ?", (username,))
+    result = cursor.fetchone()
+    conn.close()
+    return bool(result[0]) if result else False
 
 
 def get_player_room(username: str) -> Optional[str]:

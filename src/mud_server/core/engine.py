@@ -12,25 +12,52 @@ class GameEngine:
         self.world = World()
         database.init_database()
 
-    def login(self, username: str, session_id: str) -> Tuple[bool, str]:
-        """Handle player login."""
-        # Create player if doesn't exist
+    def login(self, username: str, password: str, session_id: str) -> Tuple[bool, str, Optional[str]]:
+        """
+        Handle player login.
+
+        Args:
+            username: Username
+            password: Plain text password
+            session_id: Session ID to create
+
+        Returns:
+            Tuple of (success, message, role)
+            role is None if login fails
+        """
+        # Check if player exists
         if not database.player_exists(username):
-            if not database.create_player(username):
-                return False, "Failed to create player account."
+            return False, "Invalid username or password.", None
+
+        # Verify password
+        if not database.verify_password_for_user(username, password):
+            return False, "Invalid username or password.", None
+
+        # Check if player is active (not banned)
+        if not database.is_player_active(username):
+            return False, "This account has been deactivated. Please contact an administrator.", None
+
+        # Get player role
+        role = database.get_player_role(username)
+        if not role:
+            return False, "Failed to retrieve account information.", None
 
         # Create session
         if not database.create_session(username, session_id):
-            return False, "Failed to create session."
+            return False, "Failed to create session.", None
 
+        # Get current room
         room = database.get_player_room(username)
         if not room:
             room = "spawn"
             database.set_player_room(username, room)
 
+        # Generate welcome message
         message = f"Welcome, {username}!\n"
+        message += f"Role: {role.capitalize()}\n\n"
         message += self.world.get_room_description(room, username)
-        return True, message
+
+        return True, message, role
 
     def logout(self, username: str) -> bool:
         """Handle player logout."""

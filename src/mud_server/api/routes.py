@@ -6,12 +6,18 @@ from typing import List
 
 from mud_server.api.models import (
     LoginRequest,
+    RegisterRequest,
+    ChangePasswordRequest,
+    UserManagementRequest,
     CommandRequest,
     LoginResponse,
+    RegisterResponse,
     CommandResponse,
     StatusResponse,
+    UserListResponse,
 )
-from mud_server.api.auth import validate_session, active_sessions
+from mud_server.api.auth import validate_session, active_sessions, validate_session_with_permission
+from mud_server.api.permissions import Permission, has_permission, can_manage_role
 from mud_server.core.engine import GameEngine
 from mud_server.db import database
 
@@ -26,30 +32,72 @@ def register_routes(app: FastAPI, engine: GameEngine):
 
     @app.post("/login", response_model=LoginResponse)
     async def login(request: LoginRequest):
-        """Login or create a player account."""
+        """Login with username and password."""
         username = request.username.strip()
+        password = request.password
 
         if not username or len(username) < 2 or len(username) > 20:
             raise HTTPException(
                 status_code=400, detail="Username must be 2-20 characters"
             )
 
-        # Create session
+        # Create session ID
         session_id = str(uuid.uuid4())
 
-        # Initialize game login
-        success, message = engine.login(username, session_id)
+        # Attempt login with password verification
+        success, message, role = engine.login(username, password, session_id)
 
-        if success:
-            active_sessions[session_id] = username
-            return LoginResponse(success=True, message=message, session_id=session_id)
+        if success and role:
+            # Store session with role
+            active_sessions[session_id] = (username, role)
+            return LoginResponse(
+                success=True, message=message, session_id=session_id, role=role
+            )
         else:
-            raise HTTPException(status_code=400, detail=message)
+            raise HTTPException(status_code=401, detail=message)
+
+    @app.post("/register", response_model=RegisterResponse)
+    async def register(request: RegisterRequest):
+        """Register a new player account."""
+        username = request.username.strip()
+        password = request.password
+        password_confirm = request.password_confirm
+
+        # Validate username
+        if not username or len(username) < 2 or len(username) > 20:
+            raise HTTPException(
+                status_code=400, detail="Username must be 2-20 characters"
+            )
+
+        # Check if username already exists
+        if database.player_exists(username):
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        # Validate passwords match
+        if password != password_confirm:
+            raise HTTPException(status_code=400, detail="Passwords do not match")
+
+        # Validate password strength
+        if len(password) < 8:
+            raise HTTPException(
+                status_code=400, detail="Password must be at least 8 characters"
+            )
+
+        # Create player with default 'player' role
+        if database.create_player_with_password(username, password, role="player"):
+            return RegisterResponse(
+                success=True,
+                message=f"Account created successfully! You can now login as {username}.",
+            )
+        else:
+            raise HTTPException(
+                status_code=500, detail="Failed to create account. Please try again."
+            )
 
     @app.post("/logout")
     async def logout(request: CommandRequest):
         """Logout a player."""
-        username = validate_session(request.session_id)
+        username, role = validate_session(request.session_id)
 
         engine.logout(username)
         if request.session_id in active_sessions:
@@ -60,7 +108,7 @@ def register_routes(app: FastAPI, engine: GameEngine):
     @app.post("/command", response_model=CommandResponse)
     async def execute_command(request: CommandRequest):
         """Execute a game command."""
-        username = validate_session(request.session_id)
+        username, role = validate_session(request.session_id)
 
         command = request.command.strip().lower()
 
@@ -142,14 +190,14 @@ def register_routes(app: FastAPI, engine: GameEngine):
     @app.get("/chat/{session_id}")
     async def get_chat(session_id: str):
         """Get recent chat messages from current room."""
-        username = validate_session(session_id)
+        username, role = validate_session(session_id)
         chat = engine.get_room_chat(username)
         return {"chat": chat}
 
     @app.get("/status/{session_id}")
     async def get_status(session_id: str):
         """Get player status."""
-        username = validate_session(session_id)
+        username, role = validate_session(session_id)
 
         current_room = database.get_player_room(username)
         inventory = engine.get_inventory(username)

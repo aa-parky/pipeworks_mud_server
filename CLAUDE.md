@@ -14,7 +14,9 @@ pipeworks_mud_server/
 │   │   ├── server.py      # App initialization and startup
 │   │   ├── routes.py      # All API endpoints
 │   │   ├── models.py      # Pydantic request/response models
-│   │   └── auth.py        # Session validation
+│   │   ├── auth.py        # Session validation and role tracking
+│   │   ├── password.py    # Password hashing utilities (bcrypt)
+│   │   └── permissions.py # Role-based access control system
 │   ├── core/              # Game engine logic
 │   │   ├── engine.py      # GameEngine class
 │   │   └── world.py       # World, Room, Item classes
@@ -112,6 +114,7 @@ export MUD_SERVER_URL="http://localhost:8000"
 
 **Session Management**
 - Login creates UUID session_id stored in both database and server memory (auth.py:active_sessions)
+- Sessions stored as `(username, role)` tuples for role-based authorization
 - All API requests require valid session_id for authentication
 - Sessions are not persisted to disk (lost on server restart)
 - Session activity updated on each API call via `update_session_activity()`
@@ -139,9 +142,13 @@ export MUD_SERVER_URL="http://localhost:8000"
 ### Database Schema
 
 **players table**
+- `id` - Auto-increment primary key
 - `username` (unique) - Player identifier
+- `password_hash` - Bcrypt hashed password
+- `role` - User role (player/worldbuilder/admin/superuser)
 - `current_room` - Current location (room ID)
 - `inventory` - JSON array of item IDs
+- `is_active` - Account status (1=active, 0=banned/deactivated)
 - Timestamps for created_at and last_login
 
 **sessions table**
@@ -177,11 +184,12 @@ World is defined in `data/world_data.json`:
 - Active players determined by session table JOIN
 - Exit names resolved from room IDs
 
-**Session Validation** (auth.py:16-22)
+**Session Validation** (auth.py)
 - All protected endpoints call `validate_session()`
+- Returns `(username, role)` tuple for authorization
 - Raises 401 HTTPException on invalid session
 - Updates session activity timestamp on success
-- Returns username for subsequent operations
+- `validate_session_with_permission()` checks specific permissions
 
 ## Important Considerations
 
@@ -206,11 +214,114 @@ World is defined in `data/world_data.json`:
 - No explicit transaction management or optimistic locking
 - Suitable for ~50-100 concurrent players
 
-**No Password Authentication**
-- Login only requires username
-- No password, email, or other verification
-- Anyone can login as any username
-- Sessions prevent username conflicts while logged in
+**Authentication & Authorization**
+- Password-based authentication with bcrypt hashing
+- Role-based access control (RBAC) with 4 user types
+- Session-based authentication with (username, role) tuples
+- Default superuser created on database initialization
+
+## Authentication & Security
+
+### User Roles & Permissions
+
+The system implements role-based access control (RBAC) with four user types:
+
+**Player** (default for new registrations)
+- Standard gameplay permissions
+- Can move, chat, use inventory, explore the world
+- No administrative or world-editing capabilities
+
+**World Builder**
+- All Player permissions
+- Create and edit rooms (future feature)
+- Create and modify items (future feature)
+- Design world content without admin powers
+
+**Admin**
+- All Player permissions
+- Limited world-editing capabilities
+- Kick and ban users (future feature)
+- View server logs (future feature)
+- Cannot change user roles or manage superusers
+
+**Superuser**
+- Full system access
+- Manage user accounts and roles
+- Change passwords for any user
+- Promote/demote users between roles
+- Default superuser created on database initialization
+
+### Default Credentials
+
+⚠️ **IMPORTANT**: On first database initialization, a default superuser is created:
+
+```
+Username: admin
+Password: admin123
+```
+
+**You should change this password immediately!** The system prints a warning on database initialization reminding you to change the default credentials.
+
+### Password Requirements
+
+- **Minimum length**: 8 characters
+- **Hashing**: bcrypt with passlib (intentionally slow for security)
+- **Storage**: Only password hashes stored in database, never plaintext
+- **Verification**: Password checked against hash during login
+
+### Registration
+
+- Open registration enabled by default
+- All new accounts default to **Player** role
+- Username requirements: 2-20 characters, must be unique
+- Password must be entered twice for confirmation
+- Registration endpoint: `POST /register`
+
+### Session Management
+
+Sessions track both username and role:
+- Session format: `(username: str, role: str)`
+- Sessions stored in memory (lost on server restart)
+- Session IDs are UUIDs (hard to guess)
+- All API endpoints validate session and extract role
+- Session activity updated on each API call
+
+### Security Features
+
+**Password Hashing** (password.py)
+- Uses passlib with bcrypt scheme
+- Bcrypt is intentionally slow (~100ms per hash) to prevent brute force
+- Password hashes are one-way (cannot be reversed)
+
+**Permission Checking** (permissions.py)
+- Enum-based permission system with `Permission` class
+- Role hierarchy enforced: Player < World Builder < Admin < Superuser
+- Decorator functions for route protection: `@require_permission()`, `@require_role()`
+- Permission inheritance: higher roles have all lower role permissions
+
+**Account Management**
+- Accounts can be deactivated/banned via `is_active` flag
+- Deactivated accounts cannot login
+- Role changes require superuser permission
+- Users cannot elevate their own privileges
+
+### Security Considerations
+
+**Known Limitations**:
+- Sessions not persisted (lost on restart)
+- No session expiration time
+- No rate limiting on login attempts
+- No password complexity requirements (only minimum length)
+- No email verification or password recovery
+- No two-factor authentication
+
+**Future Enhancements**:
+- Add session expiration (timeout after inactivity)
+- Implement rate limiting on auth endpoints
+- Add password complexity requirements
+- Force password change on first login for default admin
+- Add audit logging for administrative actions
+- Consider JWT tokens for stateless authentication
 
 ## File Responsibilities
 
@@ -226,15 +337,30 @@ World is defined in `data/world_data.json`:
 - All API endpoint definitions
 - Command parsing and routing to game engine
 - Request validation and error handling
+- Authentication endpoints (login, register)
 
 **models.py**
-- Pydantic request models (LoginRequest, CommandRequest, ChatRequest)
+- Pydantic request models (LoginRequest, RegisterRequest, CommandRequest, etc.)
 - Pydantic response models (LoginResponse, CommandResponse, StatusResponse)
+- User management request/response models
 
 **auth.py**
-- In-memory session storage (`active_sessions` dict)
-- Session validation logic
+- In-memory session storage with (username, role) tuples
+- Session validation logic returning both username and role
+- Permission-based session validation
 - Session activity tracking
+
+**password.py**
+- Password hashing with bcrypt via passlib
+- `hash_password()` - Create bcrypt hash from plaintext
+- `verify_password()` - Verify plaintext against hash
+
+**permissions.py**
+- Role enum (Player, WorldBuilder, Admin, Superuser)
+- Permission enum (all permission types)
+- ROLE_PERMISSIONS mapping roles to permission sets
+- Helper functions: `has_permission()`, `can_manage_role()`
+- Decorator functions: `require_permission()`, `require_role()`
 
 ### Core Layer (src/mud_server/core/)
 **engine.py**
@@ -255,13 +381,19 @@ World is defined in `data/world_data.json`:
 - Table schema definitions (players, sessions, chat_messages)
 - CRUD operations for all entities
 - JSON serialization for inventory
+- Password verification and user authentication
+- Role management functions (get/set role)
+- Account status management (activate/deactivate)
+- Default superuser creation on initialization
 
 ### Client Layer (src/mud_server/client/)
 **app.py**
 - Gradio interface components
-- Tab layouts (login, game, help)
+- Tab layouts (login, register, game, help)
+- Password input fields and validation
 - Event handlers for buttons and inputs
 - API request formatting and response handling
+- Session state management including role display
 
 ### Data Files
 **data/world_data.json**
