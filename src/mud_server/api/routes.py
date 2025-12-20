@@ -209,6 +209,32 @@ def register_routes(app: FastAPI, engine: GameEngine):
             inventory=inventory,
         )
 
+    @app.post("/change-password")
+    async def change_password(request: ChangePasswordRequest):
+        """Change user password."""
+        username, role = validate_session(request.session_id)
+
+        # Verify old password
+        if not database.verify_password_for_user(username, request.old_password):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+        # Validate new password
+        if len(request.new_password) < 8:
+            raise HTTPException(
+                status_code=400, detail="New password must be at least 8 characters"
+            )
+
+        if request.new_password == request.old_password:
+            raise HTTPException(
+                status_code=400, detail="New password must be different from current password"
+            )
+
+        # Change password
+        if database.change_password_for_user(username, request.new_password):
+            return {"success": True, "message": "Password changed successfully!"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to change password")
+
     @app.get("/health")
     async def health_check():
         """Health check endpoint."""

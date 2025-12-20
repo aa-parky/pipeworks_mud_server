@@ -191,6 +191,46 @@ def refresh_display() -> Tuple[str, str]:
     return room_info, chat_info
 
 
+def change_password(old_password: str, new_password: str, confirm_password: str) -> str:
+    """Change user password."""
+    if not session_data["logged_in"]:
+        return "You are not logged in."
+
+    if not old_password:
+        return "Current password is required."
+
+    if not new_password or len(new_password) < 8:
+        return "New password must be at least 8 characters."
+
+    if new_password != confirm_password:
+        return "New passwords do not match."
+
+    if old_password == new_password:
+        return "New password must be different from current password."
+
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/change-password",
+            json={
+                "session_id": session_data["session_id"],
+                "old_password": old_password,
+                "new_password": new_password,
+            },
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return f"✅ {data['message']}"
+        else:
+            error = response.json().get("detail", "Failed to change password")
+            return f"❌ {error}"
+
+    except requests.exceptions.ConnectionError:
+        return f"Cannot connect to server at {SERVER_URL}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 # Create Gradio interface
 def create_interface():
     """Create the Gradio interface."""
@@ -408,6 +448,45 @@ def create_interface():
                     handle_logout,
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
+
+            # Settings Tab
+            with gr.Tab("Settings"):
+                with gr.Column():
+                    gr.Markdown("### Change Password")
+                    gr.Markdown("Update your account password")
+
+                    current_password_input = gr.Textbox(
+                        label="Current Password",
+                        placeholder="Enter your current password",
+                        type="password",
+                        max_lines=1,
+                    )
+                    new_password_input = gr.Textbox(
+                        label="New Password",
+                        placeholder="Enter new password (min 8 characters)",
+                        type="password",
+                        max_lines=1,
+                    )
+                    confirm_new_password_input = gr.Textbox(
+                        label="Confirm New Password",
+                        placeholder="Re-enter new password",
+                        type="password",
+                        max_lines=1,
+                    )
+                    change_password_btn = gr.Button("Change Password", variant="primary")
+                    change_password_output = gr.Textbox(
+                        label="Status", interactive=False, lines=5
+                    )
+
+                    change_password_btn.click(
+                        change_password,
+                        inputs=[
+                            current_password_input,
+                            new_password_input,
+                            confirm_new_password_input,
+                        ],
+                        outputs=[change_password_output],
+                    )
 
             # Help Tab
             with gr.Tab("Help"):
