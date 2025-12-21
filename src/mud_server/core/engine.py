@@ -213,6 +213,10 @@ class GameEngine:
         if not current_room:
             return False, "You are not in a valid room."
 
+        # Check if current room exists in the world
+        if not self.world.get_room(current_room):
+            return False, "You are not in a valid room."
+
         can_move, destination = self.world.can_move(current_room, direction)
         if not can_move:
             return False, f"You cannot move {direction} from here."
@@ -638,6 +642,10 @@ class GameEngine:
         """
         room_id = database.get_player_room(username)
         if not room_id:
+            return "You are not in a valid room."
+
+        # Check if room exists in the world
+        if not self.world.get_room(room_id):
             return "You are not in a valid room."
 
         return self.world.get_room_description(room_id, username)

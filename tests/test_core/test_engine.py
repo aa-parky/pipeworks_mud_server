@@ -135,12 +135,12 @@ def test_move_invalid_direction(mock_engine, test_db, temp_db_path, db_with_user
 def test_move_from_invalid_room(mock_engine, test_db, temp_db_path, db_with_users):
     """Test movement when player is not in a valid room."""
     with patch.object(database, 'DB_PATH', temp_db_path):
-        # Set invalid room
+        # Set invalid room (non-existent room ID)
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE players SET current_room = NULL WHERE username = ?",
-            ("testplayer",)
+            "UPDATE players SET current_room = ? WHERE username = ?",
+            ("invalid_room_xyz", "testplayer")
         )
         conn.commit()
         conn.close()
@@ -396,12 +396,12 @@ def test_look_in_room(mock_engine, test_db, temp_db_path, db_with_users):
 def test_look_invalid_room(mock_engine, test_db, temp_db_path, db_with_users):
     """Test looking when not in a valid room."""
     with patch.object(database, 'DB_PATH', temp_db_path):
-        # Set invalid room
+        # Set invalid room (non-existent room ID)
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE players SET current_room = NULL WHERE username = ?",
-            ("testplayer",)
+            "UPDATE players SET current_room = ? WHERE username = ?",
+            ("invalid_room_xyz", "testplayer")
         )
         conn.commit()
         conn.close()
