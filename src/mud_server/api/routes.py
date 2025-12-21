@@ -53,6 +53,7 @@ from mud_server.api.models import (
     ChangePasswordRequest,
     UserManagementRequest,
     ServerStopRequest,
+    LogoutRequest,
     CommandRequest,
     LoginResponse,
     RegisterResponse,
@@ -166,7 +167,7 @@ def register_routes(app: FastAPI, engine: GameEngine):
     # ========================================================================
 
     @app.post("/logout")
-    async def logout(request: CommandRequest):
+    async def logout(request: LogoutRequest):
         """Logout player and remove session from memory and database."""
         username, role = validate_session(request.session_id)
 
@@ -387,13 +388,33 @@ Note: Commands can be used with or without the / prefix
 
     @app.post("/admin/user/manage", response_model=UserManagementResponse)
     async def manage_user(request: UserManagementRequest):
-        """Manage users: change role, ban, or unban (Admin only)."""
+        """Manage users: change role, ban/deactivate, unban, or change password."""
+        # Parse action first to determine required permission
+        action = request.action.lower()
+
+        # Normalize action aliases
+        if action == "deactivate":
+            action = "ban"
+
+        # Determine required permission based on action
+        if action == "change_role":
+            required_permission = Permission.MANAGE_USERS
+        elif action in ["ban", "unban"]:
+            required_permission = Permission.BAN_USERS
+        elif action == "change_password":
+            required_permission = Permission.MANAGE_USERS
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid action '{request.action}'. Valid actions: change_role, ban, deactivate, unban, change_password",
+            )
+
+        # Validate session with appropriate permission
         username, role = validate_session_with_permission(
-            request.session_id, Permission.MANAGE_USERS
+            request.session_id, required_permission
         )
 
         target_username = request.target_username
-        action = request.action.lower()
 
         # Check if target user exists
         if not database.player_exists(target_username):
@@ -402,11 +423,11 @@ Note: Commands can be used with or without the / prefix
         # Get target user's role
         target_role = database.get_player_role(target_username)
 
-        # Prevent self-management
-        if username == target_username:
+        # Prevent self-management (except for password changes in the future)
+        if username == target_username and action != "change_password":
             raise HTTPException(status_code=400, detail="Cannot manage your own account")
 
-        # Check permission hierarchy
+        # Check permission hierarchy (user can only manage lower-ranked users)
         if not can_manage_role(role, target_role):
             raise HTTPException(
                 status_code=403,
@@ -465,10 +486,28 @@ Note: Commands can be used with or without the / prefix
             else:
                 raise HTTPException(status_code=500, detail="Failed to unban user")
 
+        elif action == "change_password":
+            # Get new password from request
+            new_password = request.new_password
+            if not new_password:
+                raise HTTPException(status_code=400, detail="new_password is required for change_password action")
+
+            # Validate password length
+            if len(new_password) < 8:
+                raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+
+            # Change the password
+            if database.change_password_for_user(target_username, new_password):
+                return UserManagementResponse(
+                    success=True, message=f"Successfully changed password for {target_username}"
+                )
+            else:
+                raise HTTPException(status_code=500, detail="Failed to change password")
+
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid action '{action}'. Valid actions: change_role, ban, unban",
+                detail=f"Invalid action '{action}'. Valid actions: change_role, ban, deactivate, unban, change_password",
             )
 
     @app.post("/admin/server/stop", response_model=ServerStopResponse)

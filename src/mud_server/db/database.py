@@ -311,16 +311,17 @@ def verify_password_for_user(username: str, password: str) -> bool:
     """
     Verify a password for a user against their stored bcrypt hash.
 
-    Checks both password validity and account status. Inactive (banned)
-    accounts will fail verification even with correct password.
+    Note: This function only checks password validity, not account status.
+    Callers should separately check is_active status to provide specific
+    error messages for deactivated accounts.
 
     Args:
         username: Username to check (case-sensitive)
         password: Plain text password to verify
 
     Returns:
-        True if password matches AND user is active
-        False if user doesn't exist, password wrong, or account inactive
+        True if password matches
+        False if user doesn't exist or password wrong
 
     Security Note:
         This function uses constant-time comparison through bcrypt to
@@ -331,15 +332,13 @@ def verify_password_for_user(username: str, password: str) -> bool:
         True
         >>> verify_password_for_user("admin", "wrongpass")
         False
-        >>> verify_password_for_user("banned_user", "correctpass")
-        False  # Account is inactive
     """
     from mud_server.api.password import verify_password
 
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT password_hash, is_active FROM players WHERE username = ?", (username,)
+        "SELECT password_hash FROM players WHERE username = ?", (username,)
     )
     result = cursor.fetchone()
     conn.close()
@@ -347,10 +346,7 @@ def verify_password_for_user(username: str, password: str) -> bool:
     if not result:
         return False
 
-    password_hash, is_active = result
-    if not is_active:
-        return False
-
+    password_hash = result[0]
     return verify_password(password, password_hash)
 
 
@@ -618,7 +614,7 @@ def get_room_messages(room: str, limit: int = 50, username: Optional[str] = None
                 recipient = ? OR
                 username = ?
             )
-            ORDER BY timestamp DESC
+            ORDER BY timestamp DESC, id DESC
             LIMIT ?
         """,
             (room, username, username, limit),
@@ -629,7 +625,7 @@ def get_room_messages(room: str, limit: int = 50, username: Optional[str] = None
             """
             SELECT username, message, timestamp FROM chat_messages
             WHERE room = ?
-            ORDER BY timestamp DESC
+            ORDER BY timestamp DESC, id DESC
             LIMIT ?
         """,
             (room, limit),

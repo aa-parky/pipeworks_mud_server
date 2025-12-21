@@ -207,10 +207,14 @@ def test_activate_player(test_db, temp_db_path, db_with_users):
 @pytest.mark.unit
 @pytest.mark.db
 def test_verify_password_inactive_account(test_db, temp_db_path, db_with_users):
-    """Test that inactive accounts fail password verification."""
+    """Test that verify_password_for_user checks password only, not account status."""
     with patch.object(database, 'DB_PATH', temp_db_path):
         database.deactivate_player("testplayer")
-        assert database.verify_password_for_user("testplayer", "password123") is False
+        # Password verification should succeed even for inactive accounts
+        # Account status checking is done separately in the login flow
+        assert database.verify_password_for_user("testplayer", "password123") is True
+        # Verify account is actually inactive
+        assert database.is_player_active("testplayer") is False
 
 
 # ============================================================================

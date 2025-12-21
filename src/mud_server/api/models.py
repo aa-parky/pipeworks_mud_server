@@ -69,24 +69,28 @@ class UserManagementRequest(BaseModel):
     Admin request to manage user accounts.
 
     Requires admin or superuser permissions. Allows role changes, banning,
-    and unbanning of user accounts. Superusers can manage all users, admins
-    can only manage users with lower permissions.
+    unbanning, and password changes of user accounts. Superusers can manage
+    all users, admins can only manage users with lower permissions.
 
     Attributes:
-        session_id: Active session ID (must have MANAGE_USERS permission)
+        session_id: Active session ID (must have appropriate permission)
         target_username: Username of the account to manage
         action: Management action - one of:
             - "change_role": Change user's role (requires new_role parameter)
-            - "ban": Deactivate user account (prevents login, removes active session)
+            - "ban" or "deactivate": Deactivate user account (prevents login, removes active session)
             - "unban": Reactivate previously banned account
+            - "change_password": Change user's password (requires new_password parameter)
         new_role: (Optional) New role when action is "change_role"
             Valid roles: "player", "worldbuilder", "admin", "superuser"
+        new_password: (Optional) New password when action is "change_password"
+            Must be at least 8 characters
     """
 
     session_id: str
     target_username: str
-    action: str  # "change_role", "ban", "unban"
+    action: str  # "change_role", "ban", "deactivate", "unban", "change_password"
     new_role: Optional[str] = None
+    new_password: Optional[str] = None
 
 
 class ServerStopRequest(BaseModel):
@@ -99,6 +103,17 @@ class ServerStopRequest(BaseModel):
 
     Attributes:
         session_id: Active session ID (must have STOP_SERVER permission)
+    """
+
+    session_id: str
+
+
+class LogoutRequest(BaseModel):
+    """
+    Request to logout and end the current session.
+
+    Attributes:
+        session_id: Active session ID to be terminated
     """
 
     session_id: str
