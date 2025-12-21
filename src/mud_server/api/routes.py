@@ -547,7 +547,6 @@ Note: Commands can be used with or without the / prefix
         )
 
         import json
-        import subprocess
 
         try:
             server_url = request.server_url.strip()
@@ -604,15 +603,14 @@ Note: Commands can be used with or without the / prefix
                     return OllamaCommandResponse(success=True, output=output)
                 else:
                     return OllamaCommandResponse(
-                        success=False, output=f"Failed to show running models: HTTP {response.status_code}"
+                        success=False,
+                        output=f"Failed to show running models: HTTP {response.status_code}",
                     )
 
             elif cmd_verb == "pull":
                 # Pull a model
                 if len(cmd_parts) < 2:
-                    return OllamaCommandResponse(
-                        success=False, output="Usage: pull <model_name>"
-                    )
+                    return OllamaCommandResponse(success=False, output="Usage: pull <model_name>")
                 model_name = cmd_parts[1]
 
                 # Pull is a streaming endpoint
@@ -671,9 +669,7 @@ Note: Commands can be used with or without the / prefix
             elif cmd_verb == "show":
                 # Show model information
                 if len(cmd_parts) < 2:
-                    return OllamaCommandResponse(
-                        success=False, output="Usage: show <model_name>"
-                    )
+                    return OllamaCommandResponse(success=False, output="Usage: show <model_name>")
                 model_name = cmd_parts[1]
 
                 response = req.post(
@@ -690,7 +686,8 @@ Note: Commands can be used with or without the / prefix
                     return OllamaCommandResponse(success=True, output=output)
                 else:
                     return OllamaCommandResponse(
-                        success=False, output=f"Failed to show model info: HTTP {response.status_code}"
+                        success=False,
+                        output=f"Failed to show model info: HTTP {response.status_code}",
                     )
 
             else:

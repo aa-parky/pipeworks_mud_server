@@ -13,7 +13,7 @@ Models are organized into two categories:
 2. Response models: Data sent FROM the server TO the client
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 

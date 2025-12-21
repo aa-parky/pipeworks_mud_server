@@ -7,7 +7,8 @@ Visible only when logged in.
 """
 
 import gradio as gr
-from mud_server.client.api_client import send_command, refresh_display, get_status, logout
+
+from mud_server.client.api_client import get_status, logout, refresh_display, send_command
 
 
 def create(session_state):

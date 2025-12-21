@@ -24,7 +24,7 @@ def load_css(filename: str) -> str:
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     css_path = os.path.join(static_dir, filename)
 
-    with open(css_path, "r") as f:
+    with open(css_path) as f:
         return f.read()
 
 

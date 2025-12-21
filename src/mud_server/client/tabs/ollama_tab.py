@@ -6,6 +6,7 @@ Visible only for admin and superuser roles.
 """
 
 import gradio as gr
+
 from mud_server.client.api_client import execute_ollama_command
 
 
@@ -119,7 +120,10 @@ The system will remember your active model until you start a new `/run` command.
 
                 # No slash, no active model - inform user
                 else:
-                    return "Please use a slash command (e.g., /list, /run llama2 Hello) or start a conversation with /run first.", current_model
+                    return (
+                        "Please use a slash command (e.g., /list, /run llama2 Hello) or start a conversation with /run first.",
+                        current_model,
+                    )
 
             execute_ollama_btn.click(
                 handle_execute_ollama,

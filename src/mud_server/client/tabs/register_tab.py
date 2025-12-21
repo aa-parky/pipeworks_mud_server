@@ -6,6 +6,7 @@ Visible only when not logged in.
 """
 
 import gradio as gr
+
 from mud_server.client.api_client import register
 
 
@@ -39,9 +40,7 @@ def create():
                 max_lines=1,
             )
             register_btn = gr.Button("Register", variant="primary")
-            register_output = gr.Textbox(
-                label="Registration Status", interactive=False, lines=10
-            )
+            register_output = gr.Textbox(label="Registration Status", interactive=False, lines=10)
 
             # Wire up register button
             register_btn.click(

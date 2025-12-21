@@ -6,10 +6,11 @@ Visible only for admin and superuser roles.
 """
 
 import gradio as gr
+
 from mud_server.client.api_client import (
+    get_database_chat,
     get_database_players,
     get_database_sessions,
-    get_database_chat,
     manage_user,
 )
 

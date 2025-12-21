@@ -40,22 +40,17 @@ API Communication:
 
 import gradio as gr
 
-# Import utility functions
-from mud_server.client.utils import load_css, create_session_state
-
-# Import API client for login function (needed for top-level event wiring)
 from mud_server.client.api_client import login, logout
-
-# Import tab modules
 from mud_server.client.tabs import (
-    login_tab,
-    register_tab,
-    game_tab,
-    settings_tab,
     database_tab,
-    ollama_tab,
+    game_tab,
     help_tab,
+    login_tab,
+    ollama_tab,
+    register_tab,
+    settings_tab,
 )
+from mud_server.client.utils import create_session_state, load_css
 
 
 def create_interface():
