@@ -14,14 +14,11 @@ Tests cover:
 All tests use temporary databases for isolation.
 """
 
-import pytest
-import json
-from pathlib import Path
 from unittest.mock import patch
 
-from mud_server.db import database
-from mud_server.api.password import hash_password
+import pytest
 
+from mud_server.db import database
 
 # ============================================================================
 # DATABASE INITIALIZATION TESTS

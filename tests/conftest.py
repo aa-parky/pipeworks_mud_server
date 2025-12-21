@@ -12,20 +12,20 @@ Fixtures are organized by scope (function, module, session) to optimize
 test performance and isolation.
 """
 
-import pytest
+import json
+import shutil
 import sqlite3
 import tempfile
-import shutil
-import json
+from collections.abc import Generator
 from pathlib import Path
-from typing import Dict, Generator
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import mock_open, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
-from mud_server.core.world import World, Room, Item
 from mud_server.core.engine import GameEngine
+from mud_server.core.world import Item, Room, World
 from mud_server.db import database
-
 
 # ============================================================================
 # DATABASE FIXTURES
@@ -121,7 +121,7 @@ def test_db(temp_db_path: Path) -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="function")
-def db_with_users(test_db) -> Dict[str, str]:
+def db_with_users(test_db) -> dict[str, str]:
     """
     Create a test database with sample users for testing.
 
@@ -158,7 +158,7 @@ def db_with_users(test_db) -> Dict[str, str]:
 
 
 @pytest.fixture(scope="function")
-def mock_world_data() -> Dict:
+def mock_world_data() -> dict:
     """
     Create mock world data for testing without loading from JSON.
 
@@ -210,7 +210,7 @@ def mock_world_data() -> Dict:
 
 
 @pytest.fixture(scope="function")
-def mock_world(mock_world_data: Dict) -> World:
+def mock_world(mock_world_data: dict) -> World:
     """
     Create a mock World instance for testing.
 
@@ -224,7 +224,6 @@ def mock_world(mock_world_data: Dict) -> World:
         World instance with mock data loaded
     """
     # Create a mock JSON file content
-    import json
     mock_json = json.dumps({"rooms": {}, "items": {}})
 
     # Mock the file opening and JSON loading
@@ -288,9 +287,9 @@ def test_client(test_db, mock_world_data) -> TestClient:
             assert response.status_code == 200
     """
     from fastapi import FastAPI
+
     from mud_server.api.routes import register_routes
     from mud_server.core.engine import GameEngine
-    import json
 
     # Create app
     app = FastAPI()
@@ -315,7 +314,7 @@ def test_client(test_db, mock_world_data) -> TestClient:
 
 
 @pytest.fixture(scope="function")
-def authenticated_client(test_client: TestClient, db_with_users: Dict[str, str]) -> Dict:
+def authenticated_client(test_client: TestClient, db_with_users: dict[str, str]) -> dict:
     """
     Create an authenticated test client with logged-in user.
 
@@ -377,7 +376,7 @@ def sample_item() -> Item:
 
 
 @pytest.fixture
-def mock_session_data() -> Dict[str, tuple]:
+def mock_session_data() -> dict[str, tuple]:
     """
     Create mock session data for auth testing.
 

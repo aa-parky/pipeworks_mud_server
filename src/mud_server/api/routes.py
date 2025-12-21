@@ -41,33 +41,32 @@ Design Notes:
     - All database operations through database module
 """
 
-import uuid
 import os
 import signal
-from fastapi import FastAPI, HTTPException
-from typing import List
+import uuid
 
+from fastapi import FastAPI, HTTPException
+
+from mud_server.api.auth import active_sessions, validate_session, validate_session_with_permission
 from mud_server.api.models import (
-    LoginRequest,
-    RegisterRequest,
     ChangePasswordRequest,
-    UserManagementRequest,
-    ServerStopRequest,
-    LogoutRequest,
     CommandRequest,
-    LoginResponse,
-    RegisterResponse,
     CommandResponse,
-    StatusResponse,
-    UserListResponse,
+    DatabaseChatResponse,
     DatabasePlayersResponse,
     DatabaseSessionsResponse,
-    DatabaseChatResponse,
-    UserManagementResponse,
+    LoginRequest,
+    LoginResponse,
+    LogoutRequest,
+    RegisterRequest,
+    RegisterResponse,
+    ServerStopRequest,
     ServerStopResponse,
+    StatusResponse,
+    UserManagementRequest,
+    UserManagementResponse,
 )
-from mud_server.api.auth import validate_session, active_sessions, validate_session_with_permission
-from mud_server.api.permissions import Permission, has_permission, can_manage_role
+from mud_server.api.permissions import Permission, can_manage_role
 from mud_server.core.engine import GameEngine
 from mud_server.db import database
 

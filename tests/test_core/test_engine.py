@@ -12,11 +12,12 @@ Tests cover:
 All tests use mocked database and world for isolation.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, Mock
+
 from mud_server.core.engine import GameEngine
 from mud_server.db import database
-
 
 # ============================================================================
 # LOGIN/LOGOUT TESTS
@@ -480,7 +481,6 @@ def test_get_room_chat_empty(mock_engine, test_db, temp_db_path, db_with_users):
 @pytest.mark.game
 def test_opposite_direction():
     """Test the _opposite_direction static method."""
-    from mud_server.core.engine import GameEngine
 
     assert GameEngine._opposite_direction("north") == "south"
     assert GameEngine._opposite_direction("south") == "north"

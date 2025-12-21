@@ -35,12 +35,10 @@ Performance Notes:
     - Consider PostgreSQL for larger scale
 """
 
-import sqlite3
 import json
-import os
+import sqlite3
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 # ============================================================================
 # CONFIGURATION
@@ -355,7 +353,7 @@ def verify_password_for_user(username: str, password: str) -> bool:
 # ============================================================================
 
 
-def get_player_role(username: str) -> Optional[str]:
+def get_player_role(username: str) -> str | None:
     """
     Get the role of a player.
 
@@ -403,7 +401,7 @@ def set_player_role(username: str, role: str) -> bool:
 # ============================================================================
 
 
-def get_all_players() -> List[Dict[str, Any]]:
+def get_all_players() -> list[dict[str, Any]]:
     """
     Get list of all players with their basic details.
 
@@ -520,7 +518,7 @@ def is_player_active(username: str) -> bool:
     return bool(result[0]) if result else False
 
 
-def get_player_room(username: str) -> Optional[str]:
+def get_player_room(username: str) -> str | None:
     """Get the current room of a player."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -550,7 +548,7 @@ def set_player_room(username: str, room: str) -> bool:
 # ============================================================================
 
 
-def get_player_inventory(username: str) -> List[str]:
+def get_player_inventory(username: str) -> list[str]:
     """Get player's inventory as list of item IDs. Returns empty list if player doesn't exist."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -562,7 +560,7 @@ def get_player_inventory(username: str) -> List[str]:
     return []
 
 
-def set_player_inventory(username: str, inventory: List[str]) -> bool:
+def set_player_inventory(username: str, inventory: list[str]) -> bool:
     """Set the inventory of a player."""
     try:
         conn = get_connection()
@@ -583,7 +581,7 @@ def set_player_inventory(username: str, inventory: List[str]) -> bool:
 # ============================================================================
 
 
-def add_chat_message(username: str, message: str, room: str, recipient: Optional[str] = None) -> bool:
+def add_chat_message(username: str, message: str, room: str, recipient: str | None = None) -> bool:
     """Add chat message. If recipient is None: public. If set: private whisper visible only to sender/recipient."""
     try:
         conn = get_connection()
@@ -599,7 +597,7 @@ def add_chat_message(username: str, message: str, room: str, recipient: Optional
         return False
 
 
-def get_room_messages(room: str, limit: int = 50, username: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_room_messages(room: str, limit: int = 50, username: str | None = None) -> list[dict[str, Any]]:
     """Get recent messages from a room. Filters whispers based on username."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -665,7 +663,7 @@ def create_session(username: str, session_id: str) -> bool:
         return False
 
 
-def get_active_players() -> List[str]:
+def get_active_players() -> list[str]:
     """Get list of currently active players."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -675,7 +673,7 @@ def get_active_players() -> List[str]:
     return [row[0] for row in results]
 
 
-def get_players_in_room(room: str) -> List[str]:
+def get_players_in_room(room: str) -> list[str]:
     """Get list of players currently in a room."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -726,7 +724,7 @@ def update_session_activity(username: str) -> bool:
 # ============================================================================
 
 
-def get_all_players_detailed() -> List[Dict[str, Any]]:
+def get_all_players_detailed() -> list[dict[str, Any]]:
     """Get detailed player list including password hash prefix (for admin database viewer)."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -759,7 +757,7 @@ def get_all_players_detailed() -> List[Dict[str, Any]]:
     return players
 
 
-def get_all_sessions() -> List[Dict[str, Any]]:
+def get_all_sessions() -> list[dict[str, Any]]:
     """Get all active sessions."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -787,7 +785,7 @@ def get_all_sessions() -> List[Dict[str, Any]]:
     return sessions
 
 
-def get_all_chat_messages(limit: int = 100) -> List[Dict[str, Any]]:
+def get_all_chat_messages(limit: int = 100) -> list[dict[str, Any]]:
     """Get recent chat messages across all rooms."""
     conn = get_connection()
     cursor = conn.cursor()

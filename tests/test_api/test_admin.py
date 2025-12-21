@@ -11,13 +11,11 @@ Tests cover:
 All tests verify proper permission checking and role-based access.
 """
 
-import pytest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
 
-from mud_server.api.auth import active_sessions
+import pytest
+
 from mud_server.db import database
-
 
 # ============================================================================
 # ADMIN DATABASE VIEWING TESTS
@@ -250,7 +248,7 @@ def test_player_cannot_stop_server(test_client, test_db, temp_db_path, db_with_u
 @pytest.mark.auth
 def test_role_permission_hierarchy():
     """Test that permission hierarchy is properly enforced."""
-    from mud_server.api.permissions import has_permission, Permission
+    from mud_server.api.permissions import Permission, has_permission
 
     # Player has basic permissions
     assert has_permission("player", Permission.PLAY_GAME) is True

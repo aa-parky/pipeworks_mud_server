@@ -12,12 +12,9 @@ Tests cover:
 All tests use mocked world data to avoid file dependencies.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, mock_open
-import json
-
-from mud_server.core.world import World, Room, Item
-
 
 # ============================================================================
 # ROOM DATACLASS TESTS

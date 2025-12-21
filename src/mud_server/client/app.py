@@ -42,11 +42,10 @@ Design Notes:
     - Database viewer shows truncated password hashes for security
 """
 
+import os
+
 import gradio as gr
 import requests
-import json
-from typing import Optional, Tuple
-import os
 
 # ============================================================================
 # CONFIGURATION
@@ -274,7 +273,7 @@ def logout(session_state: dict):
         )
 
     try:
-        response = requests.post(
+        requests.post(
             f"{SERVER_URL}/logout",
             json={"session_id": session_state.get("session_id"), "command": "logout"},
         )
@@ -463,7 +462,7 @@ Active Players: {', '.join(data['active_players']) if data['active_players'] els
         return f"Error: {str(e)}"
 
 
-def refresh_display(session_state: dict) -> Tuple[str, str]:
+def refresh_display(session_state: dict) -> tuple[str, str]:
     """
     Refresh both room and chat displays by fetching current data.
 

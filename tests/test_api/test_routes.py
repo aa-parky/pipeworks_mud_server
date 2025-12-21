@@ -11,12 +11,11 @@ Tests cover:
 Uses TestClient for HTTP request testing.
 """
 
-import pytest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
+
+import pytest
 
 from mud_server.api.auth import active_sessions
-
 
 # ============================================================================
 # PUBLIC ENDPOINT TESTS

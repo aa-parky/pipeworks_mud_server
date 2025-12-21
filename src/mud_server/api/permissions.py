@@ -31,8 +31,8 @@ Security Considerations:
 """
 
 from enum import Enum
-from typing import Set, Dict
 from functools import wraps
+
 from fastapi import HTTPException
 
 # ============================================================================
@@ -122,7 +122,7 @@ class Permission(Enum):
 # NOTE: Permissions are NOT inherited - each role's permissions must be
 # explicitly listed. This makes the permission system clear and prevents
 # accidental permission grants.
-ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
+ROLE_PERMISSIONS: dict[Role, set[Permission]] = {
     # PLAYER: Basic game access
     # Can play the game and chat with other players
     Role.PLAYER: {

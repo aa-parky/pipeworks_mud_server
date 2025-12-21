@@ -10,19 +10,19 @@ Tests cover:
 All tests use isolated session dictionaries and mocked database.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, Mock
 from fastapi import HTTPException
 
 from mud_server.api.auth import (
-    get_username_from_session,
+    active_sessions,
     get_username_and_role_from_session,
+    get_username_from_session,
     validate_session,
     validate_session_with_permission,
-    active_sessions
 )
 from mud_server.api.permissions import Permission
-
 
 # ============================================================================
 # SESSION RETRIEVAL TESTS
