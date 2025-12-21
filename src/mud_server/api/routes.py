@@ -118,10 +118,16 @@ def register_routes(app: FastAPI, engine: GameEngine):
         """Execute a game command."""
         username, role = validate_session(request.session_id)
 
-        command = request.command.strip().lower()
+        command = request.command.strip()
 
         if not command:
             return CommandResponse(success=False, message="Enter a command.")
+
+        # Strip leading slash if present (support both /command and command)
+        if command.startswith("/"):
+            command = command[1:]
+
+        command = command.lower()
 
         # Parse command
         parts = command.split(maxsplit=1)
@@ -141,15 +147,15 @@ def register_routes(app: FastAPI, engine: GameEngine):
             success, message = engine.move(username, direction)
             return CommandResponse(success=success, message=message)
 
-        elif cmd == "look":
+        elif cmd in ["look", "l"]:
             message = engine.look(username)
             return CommandResponse(success=True, message=message)
 
-        elif cmd == "inventory" or cmd == "inv":
+        elif cmd in ["inventory", "inv", "i"]:
             message = engine.get_inventory(username)
             return CommandResponse(success=True, message=message)
 
-        elif cmd == "get" or cmd == "take":
+        elif cmd in ["get", "take"]:
             if not args:
                 return CommandResponse(success=False, message="Get what?")
             success, message = engine.pickup_item(username, args)
@@ -161,11 +167,32 @@ def register_routes(app: FastAPI, engine: GameEngine):
             success, message = engine.drop_item(username, args)
             return CommandResponse(success=success, message=message)
 
-        elif cmd == "chat" or cmd == "say":
+        elif cmd in ["say", "chat"]:
             if not args:
                 return CommandResponse(success=False, message="Say what?")
             success, message = engine.chat(username, args)
             return CommandResponse(success=success, message=message)
+
+        elif cmd == "yell":
+            if not args:
+                return CommandResponse(success=False, message="Yell what?")
+            # Yell sends to all rooms (broadcast)
+            success, message = engine.chat(username, f"[YELL] {args}")
+            return CommandResponse(success=success, message=f"You yell: {args}")
+
+        elif cmd in ["whisper", "w"]:
+            if not args:
+                return CommandResponse(success=False, message="Whisper to whom? Usage: /whisper <player> <message>")
+            # Parse whisper target and message
+            whisper_parts = args.split(maxsplit=1)
+            if len(whisper_parts) < 2:
+                return CommandResponse(success=False, message="Whisper what? Usage: /whisper <player> <message>")
+            target = whisper_parts[0]
+            msg = whisper_parts[1]
+            # For now, just send as regular chat with [WHISPER] prefix
+            # TODO: Implement private messaging
+            success, message = engine.chat(username, f"[WHISPER to {target}] {msg}")
+            return CommandResponse(success=success, message=f"You whisper to {target}: {msg}")
 
         elif cmd == "who":
             players = engine.get_active_players()
@@ -175,17 +202,28 @@ def register_routes(app: FastAPI, engine: GameEngine):
                 message = "Active players:\n" + "\n".join(f"  - {p}" for p in players)
             return CommandResponse(success=True, message=message)
 
-        elif cmd == "help":
+        elif cmd in ["help", "?"]:
             help_text = """
 [Available Commands]
-  north/n, south/s, east/e, west/w - Move in a direction
-  look - Examine the current room
-  inventory/inv - View your inventory
-  get/take <item> - Pick up an item
-  drop <item> - Drop an item
-  say/chat <message> - Send a message to the room
-  who - List active players
-  help - Show this help message
+Movement:
+  /north, /n, /south, /s, /east, /e, /west, /w - Move in a direction
+
+Actions:
+  /look, /l - Examine the current room
+  /inventory, /inv, /i - View your inventory
+  /get <item>, /take <item> - Pick up an item
+  /drop <item> - Drop an item
+
+Communication:
+  /say <message> - Send a message to the current room
+  /yell <message> - Yell to all rooms (everyone hears)
+  /whisper <player> <message> - Whisper to a specific player
+
+Other:
+  /who - List active players
+  /help, /? - Show this help message
+
+Note: Commands can be used with or without the / prefix
             """
             return CommandResponse(success=True, message=help_text)
 

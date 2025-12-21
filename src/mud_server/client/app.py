@@ -644,9 +644,11 @@ def create_interface():
                 with gr.Row():
                     chat_input = gr.Textbox(
                         label="Send Message",
-                        placeholder="Type 'say <message>' or 'chat <message>'",
+                        placeholder="Type: /say <message> or /yell <message> or /whisper <player> <message>",
                         max_lines=1,
+                        scale=4,
                     )
+                    send_btn = gr.Button("Send", variant="primary", scale=1)
 
                 with gr.Row():
                     gr.Markdown("### Movement & Actions")
@@ -666,7 +668,7 @@ def create_interface():
                 with gr.Row():
                     command_input = gr.Textbox(
                         label="Command",
-                        placeholder="Enter a command (or use buttons above)",
+                        placeholder="Type: /look, /get <item>, /north, /help (or use buttons above)",
                         max_lines=1,
                     )
                     command_btn = gr.Button("Execute", variant="primary")
@@ -703,6 +705,14 @@ def create_interface():
                         room, chat = refresh_display(session_st)
                         return room, chat, get_status(session_st)
                     return gr.update(), gr.update(), gr.update()  # No updates if not logged in
+
+                def handle_send(msg: str, session_st: dict):
+                    """Handle sending a chat message."""
+                    if not msg or not msg.strip():
+                        return "", gr.update(), gr.update(), gr.update()  # Don't update if empty
+                    result = send_command(msg, session_st)
+                    room, chat = refresh_display(session_st)
+                    return "", room, chat, get_status(session_st)  # Clear input after sending
 
                 # Button click handlers
                 north_btn.click(
@@ -751,6 +761,19 @@ def create_interface():
                     handle_command,
                     inputs=[command_input, session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
+                )
+
+                send_btn.click(
+                    handle_send,
+                    inputs=[chat_input, session_state],
+                    outputs=[chat_input, room_display, chat_display, status_display],
+                )
+
+                # Also submit on Enter key in chat input
+                chat_input.submit(
+                    handle_send,
+                    inputs=[chat_input, session_state],
+                    outputs=[chat_input, room_display, chat_display, status_display],
                 )
 
                 refresh_btn.click(
@@ -947,14 +970,28 @@ def create_interface():
 3. Navigate to the Game tab to start playing
 
 ## Commands
-- **Movement**: Use the arrow buttons or type `north`, `south`, `east`, `west` (or `n`, `s`, `e`, `w`)
-- **Look**: View your current location
-- **Inventory**: Check your items
-- **Get/Take**: Pick up an item (`get torch`)
-- **Drop**: Drop an item from your inventory
-- **Say/Chat**: Send a message to the room
-- **Who**: See who else is online
-- **Help**: Display help information
+All commands can use the `/` prefix (e.g., `/look`) but it's optional.
+
+### Movement
+- `/north`, `/n` - Move north
+- `/south`, `/s` - Move south
+- `/east`, `/e` - Move east
+- `/west`, `/w` - Move west
+
+### Actions
+- `/look`, `/l` - View your current location
+- `/inventory`, `/inv`, `/i` - Check your items
+- `/get <item>`, `/take <item>` - Pick up an item (e.g., `/get torch`)
+- `/drop <item>` - Drop an item from your inventory
+
+### Communication
+- `/say <message>` - Send a message to players in your current room
+- `/yell <message>` - Yell to ALL rooms (everyone hears)
+- `/whisper <player> <message>` - Whisper to a specific player
+
+### Other
+- `/who` - See who else is online
+- `/help`, `/?` - Display help information
 
 ## World
 The world consists of a central spawn zone with 4 cardinal directions:
@@ -966,8 +1003,9 @@ The world consists of a central spawn zone with 4 cardinal directions:
 Each zone contains items you can collect.
 
 ## Tips
-- Use the Refresh Display button to update your view
+- The game auto-refreshes every 3 seconds
 - Chat messages are visible to all players in the same room
+- Yells can be heard from any room
 - You can pick up items and carry them in your inventory
                 """)
 
