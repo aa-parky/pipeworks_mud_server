@@ -1,4 +1,31 @@
-"""Main game engine with game logic."""
+"""
+Main game engine with game logic.
+
+This module contains the GameEngine class which implements all core game
+mechanics and business logic for the MUD server. It acts as the interface
+between the API routes and the underlying world/database systems.
+
+The engine handles:
+- Player authentication and sessions
+- Movement between rooms
+- Inventory management (pickup/drop items)
+- Chat systems (say, yell, whisper)
+- Room observation and interaction
+- Player presence and status
+
+Design Pattern:
+    The GameEngine uses the Facade pattern, providing a simplified interface
+    to the complex subsystems (World, Database). API routes call engine methods
+    which coordinate between the world data and database operations.
+
+Architecture:
+    API Routes → GameEngine → World + Database
+
+    - Routes validate sessions and call engine methods
+    - Engine implements game logic and coordinates subsystems
+    - World provides static game data (rooms, items)
+    - Database provides persistent player state
+"""
 
 from typing import List, Optional, Tuple
 from mud_server.core.world import World
@@ -6,24 +33,86 @@ from mud_server.db import database
 
 
 class GameEngine:
-    """Main game engine managing game logic."""
+    """
+    Main game engine managing all game logic and mechanics.
+
+    This class is instantiated once at server startup and handles all game
+    operations. It coordinates between the World (static game data) and the
+    Database (dynamic player state) to implement game mechanics.
+
+    Attributes:
+        world: World instance containing rooms and items from JSON
+
+    Responsibilities:
+        - Player login/logout with authentication
+        - Movement validation and execution
+        - Inventory operations (pickup, drop, view)
+        - Chat message handling (say, yell, whisper)
+        - Room descriptions and observation
+        - Player status and presence queries
+
+    Design Notes:
+        - All methods return (success: bool, message: str) tuples for API responses
+        - Database operations are called directly (no repository pattern)
+        - Broadcasting to other players is stubbed (not yet implemented)
+        - All game state is persisted to database immediately
+    """
 
     def __init__(self):
+        """
+        Initialize the game engine.
+
+        Loads the world data from JSON and initializes the database schema.
+        This is called once when the server starts.
+
+        Side Effects:
+            - Loads world_data.json into memory
+            - Creates database tables if they don't exist
+            - Creates default superuser if no players exist
+        """
+        # Load world data (rooms and items) from JSON
         self.world = World()
+
+        # Initialize database schema (creates tables, default admin)
         database.init_database()
 
     def login(self, username: str, password: str, session_id: str) -> Tuple[bool, str, Optional[str]]:
         """
-        Handle player login.
+        Handle player login with authentication and session creation.
+
+        This method performs complete login validation:
+        1. Verifies username exists in database
+        2. Verifies password against bcrypt hash
+        3. Checks account is active (not banned)
+        4. Retrieves user role for permission system
+        5. Creates session in database
+        6. Ensures player has a valid room location
+        7. Generates welcome message with room description
 
         Args:
-            username: Username
-            password: Plain text password
-            session_id: Session ID to create
+            username: Player's username (case-sensitive)
+            password: Plain text password to verify
+            session_id: UUID session identifier to create
 
         Returns:
             Tuple of (success, message, role)
-            role is None if login fails
+            - success: True if login succeeded, False otherwise
+            - message: Welcome message with room description OR error message
+            - role: User's role string ("player", "worldbuilder", "admin", "superuser")
+                   None if login failed
+
+        Failure Cases:
+            - Username doesn't exist
+            - Password incorrect
+            - Account is deactivated/banned
+            - Failed to retrieve role
+            - Failed to create session
+
+        Example:
+            >>> engine.login("player1", "secret123", "uuid-123")
+            (True, "Welcome, player1!\\nRole: Player\\n\\n=== Spawn Zone ===...", "player")
+            >>> engine.login("player1", "wrong", "uuid-456")
+            (False, "Invalid username or password.", None)
         """
         # Check if player exists
         if not database.player_exists(username):
@@ -60,11 +149,66 @@ class GameEngine:
         return True, message, role
 
     def logout(self, username: str) -> bool:
-        """Handle player logout."""
+        """
+        Handle player logout by removing their session.
+
+        Removes the player's session from the database, effectively logging
+        them out. The session will also need to be removed from memory
+        (active_sessions dict) by the calling route handler.
+
+        Args:
+            username: Username of the player logging out
+
+        Returns:
+            True if session removed successfully, False otherwise
+
+        Side Effects:
+            - Removes session record from database sessions table
+            - Player will no longer appear in active players list
+
+        Note:
+            This only removes the database session. The calling code (routes.py)
+            is responsible for also removing the session from the in-memory
+            active_sessions dictionary.
+        """
         return database.remove_session(username)
 
     def move(self, username: str, direction: str) -> Tuple[bool, str]:
-        """Handle player movement."""
+        """
+        Handle player movement between rooms.
+
+        Validates the move, updates player location in database, and generates
+        appropriate response messages. Also broadcasts movement notifications
+        to other players in the affected rooms (currently stubbed).
+
+        Movement Process:
+        1. Get player's current room from database
+        2. Check if move is valid (exit exists, destination valid)
+        3. Update player's room in database
+        4. Generate room description for new location
+        5. Broadcast departure message to old room
+        6. Broadcast arrival message to new room
+
+        Args:
+            username: Player attempting to move
+            direction: Direction to move ("north", "south", "east", "west")
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if move succeeded, False otherwise
+            - message: New room description OR error message
+
+        Failure Cases:
+            - Player not in a valid room
+            - No exit in that direction
+            - Database update failed
+
+        Example:
+            >>> engine.move("player1", "north")
+            (True, "You move north.\\n=== Enchanted Forest ===...")
+            >>> engine.move("player1", "west")
+            (False, "You cannot move west from here.")
+        """
         current_room = database.get_player_room(username)
         if not current_room:
             return False, "You are not in a valid room."
@@ -92,7 +236,33 @@ class GameEngine:
         return True, message
 
     def chat(self, username: str, message: str) -> Tuple[bool, str]:
-        """Handle player chat."""
+        """
+        Handle player chat messages within their current room.
+
+        Sends a chat message to all players in the same room. The message is
+        stored in the database and can be retrieved by other players in the room.
+
+        Args:
+            username: Player sending the message
+            message: Chat message text
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if message sent, False otherwise
+            - message: Confirmation message OR error message
+
+        Failure Cases:
+            - Player not in a valid room
+            - Database insert failed
+
+        Side Effects:
+            - Adds message to chat_messages table with room association
+            - Message will appear in other players' chat history
+
+        Example:
+            >>> engine.chat("player1", "Hello everyone!")
+            (True, "You say: Hello everyone!")
+        """
         room = database.get_player_room(username)
         if not room:
             return False, "You are not in a valid room."
@@ -103,7 +273,41 @@ class GameEngine:
         return True, f"You say: {message}"
 
     def yell(self, username: str, message: str) -> Tuple[bool, str]:
-        """Yell to current room and all adjoining rooms."""
+        """
+        Yell a message to current room and all adjoining rooms.
+
+        Unlike regular chat which only reaches the current room, yell sends
+        the message to:
+        1. The player's current room
+        2. All rooms directly connected via exits
+
+        The message is prefixed with [YELL] to distinguish it from normal chat.
+
+        Args:
+            username: Player yelling the message
+            message: Message text to yell
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if yell sent, False otherwise
+            - message: Confirmation message OR error message
+
+        Failure Cases:
+            - Player not in a valid room
+            - Room data invalid
+            - Database insert failed
+
+        Side Effects:
+            - Adds [YELL] message to current room's chat
+            - Adds [YELL] message to all adjoining rooms' chat
+            - Players in multiple affected rooms will see the message
+
+        Example:
+            If player in "spawn" with exits to "forest" and "desert":
+            >>> engine.yell("player1", "Can anyone hear me?")
+            (True, "You yell: Can anyone hear me?")
+            # Message appears in spawn, forest, and desert rooms
+        """
         current_room_id = database.get_player_room(username)
         if not current_room_id:
             return False, "You are not in a valid room."
@@ -127,7 +331,55 @@ class GameEngine:
         return True, f"You yell: {message}"
 
     def whisper(self, username: str, target: str, message: str) -> Tuple[bool, str]:
-        """Send a private whisper to a specific player in the same room."""
+        """
+        Send a private whisper to a specific player in the same room.
+
+        Whispers are private messages that only the sender and recipient can see.
+        They are filtered by recipient when retrieving room chat messages.
+
+        Validation Checks:
+        1. Sender must be in a valid room
+        2. Target player must exist in database
+        3. Target must be online (have an active session)
+        4. Target must be in the same room as sender
+
+        The message is prefixed with [WHISPER: sender → target] to clearly
+        indicate it's a private message and show the direction.
+
+        Args:
+            username: Player sending the whisper
+            target: Username of player to whisper to (case-sensitive!)
+            message: Private message text
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if whisper sent, False otherwise
+            - message: Confirmation message OR error message explaining failure
+
+        Failure Cases:
+            - Sender not in a valid room
+            - Target player doesn't exist
+            - Target player is not online
+            - Target player is in a different room
+            - Database insert failed
+
+        Side Effects:
+            - Adds message to chat_messages with recipient field set
+            - Only sender and target can see this message in their chat
+            - Extensive logging for debugging whisper issues
+
+        Security Note:
+            Target username is case-sensitive. Command parser preserves case
+            for arguments to ensure usernames like "Mendit" work correctly.
+
+        Example:
+            >>> engine.whisper("player1", "Admin", "Help me please")
+            (True, "You whisper to Admin: Help me please")
+            # Only player1 and Admin see: [WHISPER: player1 → Admin] Help me please
+
+            >>> engine.whisper("player1", "Player2", "Hi")
+            (False, "Player 'Player2' is not in this room.")
+        """
         import logging
         logger = logging.getLogger(__name__)
 
@@ -170,7 +422,33 @@ class GameEngine:
         return True, f"You whisper to {target}: {message}"
 
     def get_room_chat(self, username: str, limit: int = 20) -> str:
-        """Get recent chat from current room, filtered for this user."""
+        """
+        Get recent chat messages from the player's current room.
+
+        Retrieves and formats chat messages, including regular chat, yells,
+        and whispers. Whispers are filtered so each player only sees:
+        - Public messages (no recipient)
+        - Whispers sent by them
+        - Whispers sent to them
+
+        Args:
+            username: Player requesting chat history
+            limit: Maximum number of messages to retrieve (default 20)
+
+        Returns:
+            Formatted string with recent messages
+            Format: "[Recent messages]:\nusername: message\n..."
+            Returns "[No messages in this room yet]" if empty
+            Returns "No messages." if player not in valid room
+
+        Example:
+            >>> engine.get_room_chat("player1", limit=5)
+            '''[Recent messages]:
+            player2: Hello!
+            player1: [WHISPER: player1 → player2] Hi there
+            player3: [YELL] Can anyone help?
+            '''
+        """
         room = database.get_player_room(username)
         if not room:
             return "No messages."
@@ -185,7 +463,26 @@ class GameEngine:
         return chat_text
 
     def get_inventory(self, username: str) -> str:
-        """Get player inventory."""
+        """
+        Get formatted player inventory listing.
+
+        Retrieves the player's inventory from the database and formats it
+        as a readable list with item names.
+
+        Args:
+            username: Player whose inventory to retrieve
+
+        Returns:
+            Formatted inventory string
+            - "Your inventory:\n  - Item1\n  - Item2..." if items present
+            - "Your inventory is empty." if no items
+
+        Example:
+            >>> engine.get_inventory("player1")
+            "Your inventory:\n  - Torch\n  - Rope\n"
+            >>> engine.get_inventory("new_player")
+            "Your inventory is empty."
+        """
         inventory = database.get_player_inventory(username)
         if not inventory:
             return "Your inventory is empty."
@@ -198,7 +495,37 @@ class GameEngine:
         return inv_text
 
     def pickup_item(self, username: str, item_name: str) -> Tuple[bool, str]:
-        """Pick up an item from the current room."""
+        """
+        Pick up an item from the current room and add to inventory.
+
+        Searches for an item with matching name (case-insensitive) in the
+        current room. If found, adds it to the player's inventory.
+
+        Design Note:
+            Items are NOT removed from the room when picked up. This allows
+            multiple players to pick up the same item. This is intentional
+            for the current proof-of-concept design.
+
+        Args:
+            username: Player picking up the item
+            item_name: Name of item to pick up (case-insensitive match)
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if item picked up, False otherwise
+            - message: Success confirmation OR error message
+
+        Failure Cases:
+            - Player not in a valid room
+            - Room doesn't exist in world data
+            - No item with that name in the room
+
+        Example:
+            >>> engine.pickup_item("player1", "torch")
+            (True, "You picked up the Torch.")
+            >>> engine.pickup_item("player1", "sword")
+            (False, "There is no 'sword' here.")
+        """
         room_id = database.get_player_room(username)
         if not room_id:
             return False, "You are not in a valid room."
@@ -228,7 +555,35 @@ class GameEngine:
         return True, f"You picked up the {item.name}."
 
     def drop_item(self, username: str, item_name: str) -> Tuple[bool, str]:
-        """Drop an item from inventory."""
+        """
+        Drop an item from player's inventory.
+
+        Searches inventory for an item with matching name (case-insensitive)
+        and removes it from the player's inventory.
+
+        Design Note:
+            Dropped items are NOT added back to the room. They simply disappear
+            from the player's inventory. This is intentional for the current
+            proof-of-concept design.
+
+        Args:
+            username: Player dropping the item
+            item_name: Name of item to drop (case-insensitive match)
+
+        Returns:
+            Tuple of (success, message)
+            - success: True if item dropped, False otherwise
+            - message: Success confirmation OR error message
+
+        Failure Cases:
+            - Player doesn't have an item with that name
+
+        Example:
+            >>> engine.drop_item("player1", "torch")
+            (True, "You dropped the Torch.")
+            >>> engine.drop_item("player1", "sword")
+            (False, "You don't have a 'sword'.")
+        """
         inventory = database.get_player_inventory(username)
 
         # Find matching item in inventory
@@ -250,7 +605,37 @@ class GameEngine:
         return True, f"You dropped the {item.name}."
 
     def look(self, username: str) -> str:
-        """Look around the current room."""
+        """
+        Look around the current room to get a full description.
+
+        Generates a detailed description of the player's current room including
+        room name, description, items, other players, and available exits.
+
+        Args:
+            username: Player looking around
+
+        Returns:
+            Formatted room description string
+            Returns "You are not in a valid room." if player location invalid
+
+        Example:
+            >>> engine.look("player1")
+            '''
+            === Spawn Zone ===
+            You stand in a peaceful plaza...
+
+            [Items here]:
+              - Torch
+              - Rope
+
+            [Players here]:
+              - player2
+
+            [Exits]:
+              - north: Enchanted Forest
+              - south: Golden Desert
+            '''
+        """
         room_id = database.get_player_room(username)
         if not room_id:
             return "You are not in a valid room."
@@ -258,18 +643,70 @@ class GameEngine:
         return self.world.get_room_description(room_id, username)
 
     def get_active_players(self) -> List[str]:
-        """Get list of active players."""
+        """
+        Get list of all currently active (logged in) players.
+
+        Queries the database sessions table to get all players with active
+        sessions. These are players currently logged into the server.
+
+        Returns:
+            List of usernames for all active players
+
+        Example:
+            >>> engine.get_active_players()
+            ['player1', 'Admin', 'Mendit']
+        """
         return database.get_active_players()
 
     def _broadcast_to_room(
         self, room_id: str, message: str, exclude: Optional[str] = None
     ):
-        """Broadcast a message to all players in a room."""
+        """
+        Broadcast a message to all players in a room.
+
+        This method is currently a stub and doesn't actually send messages.
+        Real implementation would require:
+        - WebSocket connections or message queue system
+        - Per-player message buffers
+        - Push notification mechanism
+
+        When implemented, this would be called by move() to notify other
+        players when someone enters or leaves a room.
+
+        Args:
+            room_id: Room to broadcast to
+            message: Message to send
+            exclude: Optional username to exclude from broadcast (usually sender)
+
+        Current Status:
+            Not implemented - movement notifications not sent to other players
+        """
         # This would be handled by the server's message queue
+        # TODO: Implement real-time message broadcasting
         pass
 
     @staticmethod
     def _opposite_direction(direction: str) -> str:
-        """Get the opposite direction."""
+        """
+        Get the opposite direction for movement notifications.
+
+        Used when broadcasting arrival messages. If a player moves north,
+        players in the destination room see them arrive from the south.
+
+        Args:
+            direction: Direction of movement (north, south, east, west)
+
+        Returns:
+            Opposite direction string
+            Returns "somewhere" for unrecognized directions
+
+        Example:
+            >>> engine._opposite_direction("north")
+            "south"
+            >>> engine._opposite_direction("east")
+            "west"
+            >>> engine._opposite_direction("up")
+            "somewhere"
+        """
         opposites = {"north": "south", "south": "north", "east": "west", "west": "east"}
         return opposites.get(direction.lower(), "somewhere")

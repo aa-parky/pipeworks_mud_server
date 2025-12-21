@@ -1,4 +1,39 @@
-"""Database initialization and management for the MUD server."""
+"""
+Database initialization and management for the MUD server.
+
+This module provides all database operations for the MUD server using SQLite.
+It handles:
+- Database schema initialization
+- Player account management (create, authentication, roles)
+- Session tracking (login/logout, active players)
+- Chat message storage and retrieval
+- Inventory management
+- Player state (location, status)
+
+Database Design:
+    Tables:
+    - players: User accounts with authentication and game state
+    - sessions: Active login sessions with activity tracking
+    - chat_messages: All chat messages with room and recipient info
+
+    Schema Management:
+    - Tables created automatically on first run
+    - Default superuser (admin/admin123) created if no players exist
+    - Password hashes stored using bcrypt (never plain text)
+    - JSON used for structured data (inventory)
+
+Security Considerations:
+    - Passwords hashed with bcrypt (intentionally slow)
+    - SQL injection prevented using parameterized queries
+    - Session IDs are UUIDs (hard to guess)
+    - Password verification checks account status
+
+Performance Notes:
+    - SQLite handles basic concurrency (~50-100 players)
+    - No connection pooling (single file database)
+    - Suitable for small-medium deployments
+    - Consider PostgreSQL for larger scale
+"""
 
 import sqlite3
 import json
@@ -7,62 +42,125 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-# Path to database file
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# Path to the SQLite database file
+# Navigates from this file up to project root, then into data/ directory
+# The database file is created automatically if it doesn't exist
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "mud.db"
 
 
+# ============================================================================
+# DATABASE INITIALIZATION
+# ============================================================================
+
+
 def init_database():
-    """Initialize the SQLite database with required tables."""
+    """
+    Initialize the SQLite database with required tables.
+
+    Creates all necessary tables if they don't exist and sets up a default
+    superuser account if no players exist in the database.
+
+    Tables Created:
+        players: User accounts with authentication, role, state, and inventory
+        chat_messages: All chat messages with room and recipient filtering
+        sessions: Active login sessions with activity tracking
+
+    Default Account:
+        If no players exist, creates:
+        - Username: admin
+        - Password: admin123
+        - Role: superuser
+        - Location: spawn
+
+    Side Effects:
+        - Creates data/mud.db file if it doesn't exist
+        - Creates tables if they don't exist
+        - Prints warning message if default superuser is created
+        - Commits all changes to database
+
+    Security Warning:
+        The default superuser password should be changed immediately after
+        first login! The function prints a prominent warning about this.
+
+    Example Output:
+        If creating default user:
+        ============================================================
+        ⚠️  DEFAULT SUPERUSER CREATED
+        ============================================================
+        Username: admin
+        Password: admin123
+
+        ⚠️  IMPORTANT: Change this password immediately after first login!
+        ============================================================
+    """
     from mud_server.api.password import hash_password
 
+    # Connect to database (creates file if doesn't exist)
     conn = sqlite3.connect(str(DB_PATH))
     cursor = conn.cursor()
 
-    # Players table with authentication fields
+    # ========================================================================
+    # CREATE PLAYERS TABLE
+    # Stores user accounts with authentication and game state
+    # ========================================================================
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS players (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'player',
-            current_room TEXT NOT NULL DEFAULT 'spawn',
-            inventory TEXT DEFAULT '[]',
+            username TEXT UNIQUE NOT NULL,           -- Unique username (case-sensitive)
+            password_hash TEXT NOT NULL,             -- Bcrypt password hash
+            role TEXT NOT NULL DEFAULT 'player',     -- User role for permissions
+            current_room TEXT NOT NULL DEFAULT 'spawn', -- Current location
+            inventory TEXT DEFAULT '[]',             -- JSON array of item IDs
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login TIMESTAMP,
-            is_active INTEGER DEFAULT 1
+            is_active INTEGER DEFAULT 1              -- Account status (1=active, 0=banned)
         )
     """)
 
-    # Chat messages table
+    # ========================================================================
+    # CREATE CHAT_MESSAGES TABLE
+    # Stores all chat messages with room and optional recipient (for whispers)
+    # ========================================================================
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS chat_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            message TEXT NOT NULL,
-            room TEXT NOT NULL,
-            recipient TEXT,
+            username TEXT NOT NULL,        -- Message sender
+            message TEXT NOT NULL,         -- Message content (includes [YELL], [WHISPER] prefixes)
+            room TEXT NOT NULL,            -- Room where message was sent
+            recipient TEXT,                -- NULL for public, username for whispers
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Player sessions table (for tracking active players)
+    # ========================================================================
+    # CREATE SESSIONS TABLE
+    # Tracks active login sessions with activity timestamps
+    # ========================================================================
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            session_id TEXT UNIQUE NOT NULL,
+            username TEXT UNIQUE NOT NULL,  -- One session per player (enforced by UNIQUE)
+            session_id TEXT UNIQUE NOT NULL, -- UUID session identifier
             connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
+    # Commit table creation
     conn.commit()
 
-    # Create default superuser if no players exist
+    # ========================================================================
+    # CREATE DEFAULT SUPERUSER (if no players exist)
+    # ========================================================================
     cursor.execute("SELECT COUNT(*) FROM players")
     player_count = cursor.fetchone()[0]
 
     if player_count == 0:
+        # Create default admin account
         default_password_hash = hash_password("admin123")
         cursor.execute(
             """
@@ -72,6 +170,8 @@ def init_database():
             ("admin", default_password_hash, "superuser", "spawn"),
         )
         conn.commit()
+
+        # Print prominent warning about default credentials
         print("\n" + "=" * 60)
         print("⚠️  DEFAULT SUPERUSER CREATED")
         print("=" * 60)
@@ -83,31 +183,85 @@ def init_database():
     conn.close()
 
 
+# ============================================================================
+# CONNECTION MANAGEMENT
+# ============================================================================
+
+
 def get_connection():
-    """Get a database connection."""
+    """
+    Get a database connection.
+
+    Creates a new SQLite connection to the database file. Each connection
+    should be closed after use to prevent resource leaks.
+
+    Returns:
+        sqlite3.Connection object
+
+    Note:
+        This function does not use connection pooling. Each call creates
+        a new connection. For high-concurrency applications, consider
+        implementing connection pooling.
+
+    Example:
+        >>> conn = get_connection()
+        >>> cursor = conn.cursor()
+        >>> # ... do database operations ...
+        >>> conn.close()
+    """
     return sqlite3.connect(str(DB_PATH))
+
+
+# ============================================================================
+# PLAYER ACCOUNT MANAGEMENT
+# ============================================================================
 
 
 def create_player(username: str) -> bool:
     """
     DEPRECATED: Use create_player_with_password instead.
-    This function is kept for backward compatibility but will fail
-    since password_hash is now required.
+
+    This function is kept for backward compatibility but will always fail
+    since password_hash is now a required field in the players table.
+
+    Returns:
+        False (always fails)
+
+    Note:
+        This function exists only to prevent breaking old code that might
+        call it. All new code should use create_player_with_password().
     """
     return False
 
 
 def create_player_with_password(username: str, password: str, role: str = "player") -> bool:
     """
-    Create a new player account with password.
+    Create a new player account with hashed password.
+
+    Hashes the password using bcrypt and creates a new player record in
+    the database. The player starts at the spawn room with an empty inventory.
 
     Args:
-        username: Unique username
-        password: Plain text password (will be hashed)
-        role: User role (player, worldbuilder, admin, superuser)
+        username: Unique username (case-sensitive, 2-20 chars recommended)
+        password: Plain text password (will be hashed with bcrypt)
+        role: User role, one of: "player", "worldbuilder", "admin", "superuser"
+              Defaults to "player"
 
     Returns:
-        True if player created successfully, False if username exists
+        True if player created successfully
+        False if username already exists
+
+    Side Effects:
+        - Inserts new row into players table
+        - Password is hashed with bcrypt before storage
+        - Player spawns at "spawn" room
+        - Inventory initialized as empty JSON array
+
+    Example:
+        >>> create_player_with_password("newuser", "secret123", "player")
+        True
+        >>> create_player_with_password("newuser", "password", "player")
+        False  # Username already exists
     """
     from mud_server.api.password import hash_password
 
@@ -130,7 +284,21 @@ def create_player_with_password(username: str, password: str, role: str = "playe
 
 
 def player_exists(username: str) -> bool:
-    """Check if a player exists."""
+    """
+    Check if a player account exists in the database.
+
+    Args:
+        username: Username to check (case-sensitive)
+
+    Returns:
+        True if player exists, False otherwise
+
+    Example:
+        >>> player_exists("admin")
+        True
+        >>> player_exists("nonexistent")
+        False
+    """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM players WHERE username = ?", (username,))
@@ -141,14 +309,30 @@ def player_exists(username: str) -> bool:
 
 def verify_password_for_user(username: str, password: str) -> bool:
     """
-    Verify a password for a user.
+    Verify a password for a user against their stored bcrypt hash.
+
+    Checks both password validity and account status. Inactive (banned)
+    accounts will fail verification even with correct password.
 
     Args:
-        username: Username to check
+        username: Username to check (case-sensitive)
         password: Plain text password to verify
 
     Returns:
-        True if password matches and user is active, False otherwise
+        True if password matches AND user is active
+        False if user doesn't exist, password wrong, or account inactive
+
+    Security Note:
+        This function uses constant-time comparison through bcrypt to
+        prevent timing attacks.
+
+    Example:
+        >>> verify_password_for_user("admin", "admin123")
+        True
+        >>> verify_password_for_user("admin", "wrongpass")
+        False
+        >>> verify_password_for_user("banned_user", "correctpass")
+        False  # Account is inactive
     """
     from mud_server.api.password import verify_password
 
@@ -170,8 +354,22 @@ def verify_password_for_user(username: str, password: str) -> bool:
     return verify_password(password, password_hash)
 
 
+# ============================================================================
+# ROLE MANAGEMENT
+# ============================================================================
+
+
 def get_player_role(username: str) -> Optional[str]:
-    """Get the role of a player."""
+    """
+    Get the role of a player.
+
+    Args:
+        username: Player username
+
+    Returns:
+        Role string ("player", "worldbuilder", "admin", "superuser")
+        None if player doesn't exist
+    """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT role FROM players WHERE username = ?", (username,))
@@ -181,7 +379,16 @@ def get_player_role(username: str) -> Optional[str]:
 
 
 def set_player_role(username: str, role: str) -> bool:
-    """Set the role of a player."""
+    """
+    Set/change the role of a player.
+
+    Args:
+        username: Player username
+        role: New role ("player", "worldbuilder", "admin", "superuser")
+
+    Returns:
+        True if role updated successfully, False on error
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -195,8 +402,19 @@ def set_player_role(username: str, role: str) -> bool:
         return False
 
 
+# ============================================================================
+# PLAYER QUERIES
+# ============================================================================
+
+
 def get_all_players() -> List[Dict[str, Any]]:
-    """Get list of all players with their details."""
+    """
+    Get list of all players with their basic details.
+
+    Returns:
+        List of player dictionaries with username, role, created_at,
+        last_login, and is_active fields
+    """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -223,8 +441,16 @@ def get_all_players() -> List[Dict[str, Any]]:
     return players
 
 
+# ============================================================================
+# ACCOUNT STATUS MANAGEMENT
+# ============================================================================
+
+
 def deactivate_player(username: str) -> bool:
-    """Deactivate a player (ban)."""
+    """
+    Deactivate (ban) a player account.
+    Prevents login even with correct password.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -239,7 +465,10 @@ def deactivate_player(username: str) -> bool:
 
 
 def activate_player(username: str) -> bool:
-    """Activate a player (unban)."""
+    """
+    Activate (unban) a player account.
+    Allows login with correct password.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -253,8 +482,16 @@ def activate_player(username: str) -> bool:
         return False
 
 
+# ============================================================================
+# PASSWORD MANAGEMENT
+# ============================================================================
+
+
 def change_password_for_user(username: str, new_password: str) -> bool:
-    """Change a user's password."""
+    """
+    Change a user's password (hashes with bcrypt).
+    Returns True on success, False on error.
+    """
     from mud_server.api.password import hash_password
 
     try:
@@ -272,8 +509,13 @@ def change_password_for_user(username: str, new_password: str) -> bool:
         return False
 
 
+# ============================================================================
+# PLAYER STATE AND LOCATION
+# ============================================================================
+
+
 def is_player_active(username: str) -> bool:
-    """Check if a player is active (not banned)."""
+    """Check if player is active (not banned). Returns False if player doesn't exist."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT is_active FROM players WHERE username = ?", (username,))
@@ -307,8 +549,13 @@ def set_player_room(username: str, room: str) -> bool:
         return False
 
 
+# ============================================================================
+# INVENTORY MANAGEMENT
+# ============================================================================
+
+
 def get_player_inventory(username: str) -> List[str]:
-    """Get the inventory of a player."""
+    """Get player's inventory as list of item IDs. Returns empty list if player doesn't exist."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT inventory FROM players WHERE username = ?", (username,))
@@ -335,8 +582,13 @@ def set_player_inventory(username: str, inventory: List[str]) -> bool:
         return False
 
 
+# ============================================================================
+# CHAT MESSAGES
+# ============================================================================
+
+
 def add_chat_message(username: str, message: str, room: str, recipient: Optional[str] = None) -> bool:
-    """Add a chat message to the database. If recipient is provided, it's a private whisper."""
+    """Add chat message. If recipient is None: public. If set: private whisper visible only to sender/recipient."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -394,8 +646,13 @@ def get_room_messages(room: str, limit: int = 50, username: Optional[str] = None
     return messages
 
 
+# ============================================================================
+# SESSION MANAGEMENT
+# ============================================================================
+
+
 def create_session(username: str, session_id: str) -> bool:
-    """Create a new player session."""
+    """Create new session (removes old session for same user). Returns True on success."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -468,8 +725,13 @@ def update_session_activity(username: str) -> bool:
         return False
 
 
+# ============================================================================
+# ADMIN QUERIES (Detailed Information)
+# ============================================================================
+
+
 def get_all_players_detailed() -> List[Dict[str, Any]]:
-    """Get detailed list of all players including password hash prefix."""
+    """Get detailed player list including password hash prefix (for admin database viewer)."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(

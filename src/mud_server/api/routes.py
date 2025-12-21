@@ -1,4 +1,45 @@
-"""API route definitions."""
+"""
+API route definitions for the MUD server.
+
+This module defines all HTTP API endpoints using FastAPI. The routes are organized
+into several categories:
+
+Public Endpoints (No Authentication):
+    - GET / - Root endpoint
+    - POST /login - User login with password
+    - POST /register - New account registration
+
+Authenticated Endpoints (Require Session):
+    - POST /logout - User logout
+    - POST /command - Execute game commands (movement, chat, inventory, etc.)
+    - GET /chat/{session_id} - Get room chat messages
+    - GET /status/{session_id} - Get player status
+    - POST /change-password - Change current user's password
+
+Admin Endpoints (Require Specific Permissions):
+    - GET /admin/database/players - View all players (VIEW_LOGS)
+    - GET /admin/database/sessions - View all sessions (VIEW_LOGS)
+    - GET /admin/database/chat-messages - View all chat (VIEW_LOGS)
+    - POST /admin/user/manage - Manage users (MANAGE_USERS)
+    - POST /admin/server/stop - Stop server (STOP_SERVER)
+
+Health Check:
+    - GET /health - Server health status
+
+Command Parsing:
+    Commands can be sent with or without "/" prefix. The following commands are supported:
+    - Movement: north/n, south/s, east/e, west/w
+    - Actions: look/l, inventory/inv/i, get/take <item>, drop <item>
+    - Chat: say <message>, yell <message>, whisper/w <player> <message>
+    - Info: who, help/?
+
+Design Notes:
+    - All routes use Pydantic models for request/response validation
+    - Sessions validated at start of each protected endpoint
+    - Errors raised as HTTPException with appropriate status codes
+    - Game logic delegated to GameEngine class
+    - All database operations through database module
+"""
 
 import uuid
 import os
@@ -31,16 +72,34 @@ from mud_server.db import database
 
 
 def register_routes(app: FastAPI, engine: GameEngine):
-    """Register all API routes with the FastAPI app."""
+    """
+    Register all API routes with the FastAPI app.
+
+    This function is called once at server startup to register all endpoints.
+    It creates closures over the app and engine instances so routes can access
+    the game engine.
+
+    Args:
+        app: FastAPI application instance
+        engine: GameEngine instance for game logic
+    """
+
+    # ========================================================================
+    # PUBLIC ENDPOINTS
+    # ========================================================================
 
     @app.get("/")
     async def root():
-        """Root endpoint."""
+        """Root endpoint showing API info."""
         return {"message": "MUD Server API", "version": "0.1.0"}
 
     @app.post("/login", response_model=LoginResponse)
     async def login(request: LoginRequest):
-        """Login with username and password."""
+        """
+        User login with username and password.
+
+        Validates credentials, creates session, and returns session ID + role.
+        """
         username = request.username.strip()
         password = request.password
 
@@ -102,9 +161,13 @@ def register_routes(app: FastAPI, engine: GameEngine):
                 status_code=500, detail="Failed to create account. Please try again."
             )
 
+    # ========================================================================
+    # AUTHENTICATED ENDPOINTS (Require Valid Session)
+    # ========================================================================
+
     @app.post("/logout")
     async def logout(request: CommandRequest):
-        """Logout a player."""
+        """Logout player and remove session from memory and database."""
         username, role = validate_session(request.session_id)
 
         engine.logout(username)
@@ -115,7 +178,19 @@ def register_routes(app: FastAPI, engine: GameEngine):
 
     @app.post("/command", response_model=CommandResponse)
     async def execute_command(request: CommandRequest):
-        """Execute a game command."""
+        """
+        Execute a game command.
+
+        Parses command string and delegates to appropriate engine method.
+        Commands can start with "/" or not. Command verb is case-insensitive
+        but arguments (like player names) preserve case.
+
+        Supported Commands:
+            - Movement: n/north, s/south, e/east, w/west
+            - Actions: look/l, inventory/inv/i, get/take, drop
+            - Chat: say, yell, whisper/w
+            - Info: who, help/?
+        """
         username, role = validate_session(request.session_id)
 
         command = request.command.strip()
@@ -128,11 +203,15 @@ def register_routes(app: FastAPI, engine: GameEngine):
             command = command[1:]
 
         # Parse command (only lowercase the verb, keep args case-sensitive)
+        # This is critical for whispers where usernames like "Mendit" must preserve case
         parts = command.split(maxsplit=1)
         cmd = parts[0].lower()  # Command verb is case-insensitive
         args = parts[1] if len(parts) > 1 else ""  # Arguments preserve case (e.g., player names)
 
-        # Handle commands
+        # ====================================================================
+        # COMMAND ROUTING
+        # Route to appropriate engine method based on command verb
+        # ====================================================================
         if cmd in ["n", "north", "s", "south", "e", "east", "w", "west"]:
             # Map shorthand to full direction
             direction_map = {
@@ -254,7 +333,7 @@ Note: Commands can be used with or without the / prefix
 
     @app.post("/change-password")
     async def change_password(request: ChangePasswordRequest):
-        """Change user password."""
+        """Change current user's password (requires old password verification)."""
         username, role = validate_session(request.session_id)
 
         # Verify old password
@@ -278,9 +357,13 @@ Note: Commands can be used with or without the / prefix
         else:
             raise HTTPException(status_code=500, detail="Failed to change password")
 
+    # ========================================================================
+    # ADMIN ENDPOINTS (Require Specific Permissions)
+    # ========================================================================
+
     @app.get("/admin/database/players", response_model=DatabasePlayersResponse)
     async def get_database_players(session_id: str):
-        """Get all players from the database (Admin only)."""
+        """Get all players from database with details (Requires VIEW_LOGS permission)."""
         username, role = validate_session_with_permission(session_id, Permission.VIEW_LOGS)
 
         players = database.get_all_players_detailed()

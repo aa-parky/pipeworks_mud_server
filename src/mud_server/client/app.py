@@ -1,4 +1,46 @@
-"""Gradio frontend client for the MUD."""
+"""
+Gradio-based web client for the MUD server.
+
+This module provides the web-based user interface for the MUD game using Gradio.
+It creates a multi-tab interface with separate views for login, registration,
+gameplay, settings, and admin functions.
+
+Interface Structure:
+    Tab 1: Login - User authentication
+    Tab 2: Register - New account creation
+    Tab 3: Game - Main gameplay interface with auto-refresh
+    Tab 4: Settings - Password change and server control (admin only)
+    Tab 5: Database - Admin database viewer (admin only)
+    Tab 6: Help - Game instructions and command reference
+
+Key Features:
+    - Per-user session state using gr.State (prevents cross-user contamination)
+    - Auto-refresh timer (3 seconds) for real-time game updates
+    - Role-based UI elements (admin features hidden for regular players)
+    - Chat system with support for say, yell, and whisper commands
+    - Inventory and player status display
+    - Admin database viewer for players, sessions, and chat logs
+
+State Management:
+    Each user has their own gr.State dictionary containing:
+    - session_id: UUID from successful login
+    - username: Player's username
+    - role: User role (player, worldbuilder, admin, superuser)
+    - logged_in: Boolean login status
+
+    IMPORTANT: All functions must accept and return session_state to maintain
+    per-user state isolation. Never use global variables for session data.
+
+API Communication:
+    All game operations communicate with the FastAPI backend via HTTP requests
+    to SERVER_URL (default: http://localhost:8000).
+
+Design Notes:
+    - Gradio runs on port 7860 by default
+    - Auto-refresh only active when logged in (to reduce server load)
+    - Chat messages prepended with [SYSTEM] prefix for command results
+    - Database viewer shows truncated password hashes for security
+"""
 
 import gradio as gr
 import requests
@@ -6,12 +48,35 @@ import json
 from typing import Optional, Tuple
 import os
 
-# Configuration
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# Backend API server URL (can be overridden with MUD_SERVER_URL env var)
 SERVER_URL = os.getenv("MUD_SERVER_URL", "http://localhost:8000")
 
 
+# ============================================================================
+# AUTHENTICATION FUNCTIONS
+# ============================================================================
+
+
 def login(username: str, password: str, session_state: dict):
-    """Handle login with password and update tab visibility."""
+    """
+    Handle user login with password authentication.
+
+    Sends credentials to backend, stores session data on success, and returns
+    updated UI state for tab visibility and user info display.
+
+    Args:
+        username: Username to login with
+        password: Plain text password
+        session_state: User's session state dictionary
+
+    Returns:
+        Tuple of (login_result, game_tab_visible, settings_tab_visible,
+                  db_tab_visible, user_info, session_state)
+    """
     if not username or len(username.strip()) < 2:
         return (
             session_state,
@@ -112,7 +177,31 @@ def login(username: str, password: str, session_state: dict):
 
 
 def register(username: str, password: str, password_confirm: str) -> str:
-    """Handle user registration."""
+    """
+    Handle new user account registration.
+
+    Validates input, sends registration request to backend API, and returns
+    status message indicating success or failure.
+
+    Validation Checks:
+        - Username must be at least 2 characters
+        - Password must be at least 8 characters
+        - Password and confirmation must match
+
+    Args:
+        username: Desired username for new account
+        password: Plain text password for new account
+        password_confirm: Password confirmation (must match password)
+
+    Returns:
+        String message indicating registration success or failure
+        Success: "✅ Account created successfully! You can now login as {username}."
+        Failure: Error message with specific reason (validation or server error)
+
+    Note:
+        New accounts are created with default 'player' role. Admins can
+        change roles via the Database tab after account creation.
+    """
     if not username or len(username.strip()) < 2:
         return "Username must be at least 2 characters."
 
@@ -146,7 +235,31 @@ def register(username: str, password: str, password_confirm: str) -> str:
 
 
 def logout(session_state: dict):
-    """Handle logout and reset tab visibility."""
+    """
+    Handle user logout and clean up session state.
+
+    Sends logout request to backend API, clears session data from memory,
+    and returns updated UI state with tabs hidden.
+
+    Session Cleanup:
+        - session_id set to None
+        - username set to None
+        - role set to None
+        - logged_in set to False
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Tuple of (session_state, message, blank, login_tab_visible,
+                  register_tab_visible, game_tab_hidden, settings_tab_hidden,
+                  db_tab_hidden, help_tab_hidden)
+
+    Side Effects:
+        - Backend removes session from database and memory
+        - UI returns to login/register view
+        - Game, settings, database, and help tabs become hidden
+    """
     if not session_state.get("logged_in"):
         return (
             session_state,
@@ -198,7 +311,30 @@ def logout(session_state: dict):
 
 
 def send_command(command: str, session_state: dict) -> str:
-    """Send a command to the server."""
+    """
+    Send a game command to the backend API for execution.
+
+    Forwards the command string to the backend /command endpoint, which
+    parses and executes it via the game engine.
+
+    Supported Commands:
+        - Movement: north/n, south/s, east/e, west/w
+        - Actions: look/l, inventory/inv/i, get/take <item>, drop <item>
+        - Chat: say <message>, yell <message>, whisper/w <player> <message>
+        - Info: who, help/?
+
+    Args:
+        command: Command string to execute (e.g., "look", "north", "say hello")
+        session_state: User's session state dictionary
+
+    Returns:
+        String message with command result (success or error message)
+
+    Error Handling:
+        - Returns "You are not logged in." if session invalid
+        - Returns "Session expired. Please log in again." on 401
+        - Returns connection error if backend unreachable
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -228,7 +364,28 @@ def send_command(command: str, session_state: dict) -> str:
 
 
 def get_chat(session_state: dict) -> str:
-    """Get recent chat messages."""
+    """
+    Retrieve recent chat messages from the current room.
+
+    Fetches chat messages from the backend /chat endpoint. Messages are
+    filtered by current room (only messages from player's location are shown).
+
+    Message Types Shown:
+        - say: Messages from players in the same room
+        - yell: Yells sent to current room or from adjoining rooms
+        - whisper: Private messages sent to or from this player
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        String with formatted chat messages (newline-separated)
+        Returns "You are not logged in." if session invalid
+        Returns "Failed to retrieve chat." on backend error
+
+    Note:
+        Chat messages are limited to 20 most recent by default in backend.
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -248,7 +405,36 @@ def get_chat(session_state: dict) -> str:
 
 
 def get_status(session_state: dict) -> str:
-    """Get player status."""
+    """
+    Retrieve and format player status information.
+
+    Fetches comprehensive player status from backend /status endpoint and
+    formats it for display in the status panel.
+
+    Status Information Includes:
+        - Username and role
+        - Current room location
+        - List of active players online
+        - Complete inventory listing
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Formatted multi-line string with complete player status
+        Returns "You are not logged in." if session invalid
+        Returns "Failed to retrieve status." on backend error
+
+    Display Format:
+        [Player Status]
+        Username: player1
+        Role: Player
+        Current Room: spawn
+        Active Players: player2, admin
+
+        [Inventory]
+        ...
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -278,7 +464,24 @@ Active Players: {', '.join(data['active_players']) if data['active_players'] els
 
 
 def refresh_display(session_state: dict) -> Tuple[str, str]:
-    """Refresh the display with current room and chat."""
+    """
+    Refresh both room and chat displays by fetching current data.
+
+    Convenience function that calls both send_command("look") and get_chat()
+    to update both displays simultaneously. Used by auto-refresh timer and
+    refresh button.
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Tuple of (room_description, chat_messages)
+        - room_description: Formatted room info with items, players, exits
+        - chat_messages: Recent chat messages from current room
+
+    Note:
+        Returns ("Not logged in.", "") if user not authenticated.
+    """
     if not session_state.get("logged_in"):
         return "Not logged in.", ""
 
@@ -289,7 +492,32 @@ def refresh_display(session_state: dict) -> Tuple[str, str]:
 
 
 def change_password(old_password: str, new_password: str, confirm_password: str, session_state: dict) -> str:
-    """Change user password."""
+    """
+    Change the current user's password.
+
+    Sends password change request to backend /change-password endpoint.
+    Requires verification of current password for security.
+
+    Validation Checks:
+        - Current password must be provided and correct
+        - New password must be at least 8 characters
+        - New password and confirmation must match
+        - New password must be different from old password
+
+    Args:
+        old_password: Current password (for verification)
+        new_password: Desired new password
+        confirm_password: New password confirmation (must match new_password)
+        session_state: User's session state dictionary
+
+    Returns:
+        Status message string:
+        - "✅ Password changed successfully!" on success
+        - "❌ <error>" on failure with specific reason
+
+    Security Note:
+        Backend verifies old password against bcrypt hash before allowing change.
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -329,7 +557,30 @@ def change_password(old_password: str, new_password: str, confirm_password: str,
 
 
 def stop_server(session_state: dict) -> str:
-    """Stop the server (Admin/Superuser only)."""
+    """
+    Stop the backend server (Admin/Superuser only).
+
+    Sends server shutdown request to backend /admin/server/stop endpoint.
+    Only users with admin or superuser role can execute this command.
+
+    Permission Check:
+        - Requires role in ["admin", "superuser"]
+        - Regular players and worldbuilders will receive "Access Denied"
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Status message string:
+        - "✅ Server shutdown initiated..." on success
+        - "Access Denied: Admin or Superuser role required." if insufficient perms
+        - "Access Denied: Insufficient permissions." if backend rejects (403)
+        - Connection error if server already stopped
+
+    Warning:
+        This stops the entire backend server, disconnecting all players.
+        Server must be manually restarted to restore service.
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -358,8 +609,43 @@ def stop_server(session_state: dict) -> str:
         return f"Error: {str(e)}"
 
 
+# ============================================================================
+# ADMIN DATABASE VIEWER FUNCTIONS
+# ============================================================================
+
+
 def get_database_players(session_state: dict) -> str:
-    """Fetch and format players table for display (Admin only)."""
+    """
+    Fetch and format all players from database (Admin/Superuser only).
+
+    Retrieves complete player table from backend admin endpoint and formats
+    it as human-readable text for the Database tab.
+
+    Permission Check:
+        - Requires role in ["admin", "superuser"]
+        - Regular players will receive "Access Denied"
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Formatted multi-line string with all player records:
+        === PLAYERS TABLE (N records) ===
+
+        ID: 1
+          Username: player1
+          Role: player
+          Status: ACTIVE/BANNED
+          Room: spawn
+          Inventory: ["torch", "rope"]
+          Created: 2025-01-15 10:30:00
+          Last Login: 2025-01-15 12:45:00
+          Password Hash: $2b$12$...
+
+    Security Note:
+        Password hashes are shown in full for debugging. Hashes cannot be
+        reversed to obtain plaintext passwords (bcrypt is one-way).
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -410,7 +696,34 @@ def get_database_players(session_state: dict) -> str:
 
 
 def get_database_sessions(session_state: dict) -> str:
-    """Fetch and format sessions table for display (Admin only)."""
+    """
+    Fetch and format all active sessions from database (Admin/Superuser only).
+
+    Retrieves complete sessions table from backend admin endpoint and formats
+    it as human-readable text for the Database tab. Shows all currently
+    logged-in users with their session details.
+
+    Permission Check:
+        - Requires role in ["admin", "superuser"]
+        - Regular players will receive "Access Denied"
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Formatted multi-line string with all session records:
+        === SESSIONS TABLE (N records) ===
+
+        ID: 1
+          Username: player1
+          Session ID: 550e8400-e29b-41d4-a716-446655440000
+          Connected: 2025-01-15 10:30:00
+          Last Activity: 2025-01-15 12:45:00
+
+    Note:
+        Session IDs are UUIDs that serve as authentication tokens. If exposed,
+        they could be used to impersonate users until session expires.
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -456,7 +769,34 @@ def get_database_sessions(session_state: dict) -> str:
 
 
 def get_database_chat(limit: int, session_state: dict) -> str:
-    """Fetch and format chat messages for display (Admin only)."""
+    """
+    Fetch and format recent chat messages from database (Admin/Superuser only).
+
+    Retrieves chat message history from backend admin endpoint with configurable
+    limit. Shows all messages across all rooms for monitoring/debugging.
+
+    Permission Check:
+        - Requires role in ["admin", "superuser"]
+        - Regular players will receive "Access Denied"
+
+    Args:
+        limit: Maximum number of messages to retrieve (50, 100, 200, or 500)
+        session_state: User's session state dictionary
+
+    Returns:
+        Formatted multi-line string with recent chat messages:
+        === CHAT MESSAGES (N recent messages) ===
+
+        ID: 42 | Room: spawn | Time: 2025-01-15 12:45:00
+          [player1]: Hello everyone!
+
+        ID: 43 | Room: forest | Time: 2025-01-15 12:46:00
+          [player2]: Anyone here?
+
+    Note:
+        Messages shown in reverse chronological order (newest first).
+        Includes all message types (say, yell, whisper) from all rooms.
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -499,7 +839,40 @@ def get_database_chat(limit: int, session_state: dict) -> str:
 
 
 def manage_user(target_username: str, action: str, new_role: str, session_state: dict) -> str:
-    """Perform user management action (Admin only)."""
+    """
+    Perform user management actions (Admin/Superuser only).
+
+    Allows admins to manage user accounts: change roles, ban users, or
+    unban previously banned users.
+
+    Permission Check:
+        - Requires role in ["admin", "superuser"]
+        - Cannot manage your own account
+        - Cannot manage users with higher or equal privilege level
+
+    Supported Actions:
+        - change_role: Modify user's role (requires new_role parameter)
+          Valid roles: player, worldbuilder, admin, superuser
+        - ban: Deactivate account (user cannot login, active sessions terminated)
+        - unban: Reactivate previously banned account
+
+    Args:
+        target_username: Username of user to manage
+        action: Action to perform (change_role, ban, unban)
+        new_role: New role for change_role action (ignored for ban/unban)
+        session_state: User's session state dictionary
+
+    Returns:
+        Status message string:
+        - "✅ Successfully changed {user}'s role to {role}" on role change
+        - "✅ Successfully banned {user}" on ban
+        - "✅ Successfully unbanned {user}" on unban
+        - "❌ <error>" on failure with specific reason
+
+    Security Note:
+        Role hierarchy prevents privilege escalation. Admins cannot create
+        superusers or modify other admin/superuser accounts.
+    """
     if not session_state.get("logged_in"):
         return "You are not logged in."
 
@@ -543,9 +916,55 @@ def manage_user(target_username: str, action: str, new_role: str, session_state:
         return f"Error: {str(e)}"
 
 
-# Create Gradio interface
+# ============================================================================
+# GRADIO INTERFACE CREATION
+# ============================================================================
+
+
 def create_interface():
-    """Create the Gradio interface."""
+    """
+    Create and configure the complete Gradio web interface.
+
+    Builds the entire multi-tab UI with all components, event handlers, and
+    per-user state management. This is the main entry point for UI creation.
+
+    Interface Tabs:
+        1. Login - Username/password authentication
+        2. Register - New account creation
+        3. Game - Main gameplay interface with:
+           - Room display (world view)
+           - Status panel (player info, inventory)
+           - Chat display (room messages)
+           - Movement buttons (N/S/E/W)
+           - Action buttons (look, inventory, who, help)
+           - Command input field
+           - Auto-refresh timer (3 seconds)
+        4. Settings - Password change, server control (admin)
+        5. Database - Admin database viewer (admin/superuser only)
+        6. Help - Game instructions and command reference
+
+    Tab Visibility:
+        - Login/Register: Always visible (hidden after successful login)
+        - Game/Settings/Help: Visible only when logged in
+        - Database: Visible only for admin/superuser roles
+
+    State Management:
+        - Uses gr.State for per-user session isolation
+        - Session state dict contains: session_id, username, role, logged_in
+        - All functions accept/return session_state to maintain isolation
+
+    Auto-Refresh:
+        - Timer ticks every 3 seconds when logged in
+        - Updates room, chat, and status displays automatically
+        - Only active when user is authenticated (reduces server load)
+
+    Returns:
+        gr.Blocks: Configured Gradio interface ready to launch
+
+    Note:
+        Nested handler functions (handle_command, handle_direction, etc.)
+        are defined inline to capture the session_state from the closure.
+    """
 
     with gr.Blocks(title="MUD Client", theme=gr.themes.Soft()) as interface:
         gr.Markdown("# MUD Client")
@@ -682,32 +1101,99 @@ def create_interface():
 
                 # Command handlers
                 def handle_command(cmd: str, session_st: dict):
+                    """
+                    Execute a command and refresh all displays.
+
+                    Used by action buttons (look, inventory, who, help) and
+                    the command input field. Sends command to backend, then
+                    refreshes room, chat, and status displays.
+
+                    Returns tuple for Gradio outputs: (command_result, room,
+                    chat, status, clear_chat_input)
+                    """
                     result = send_command(cmd, session_st)
                     room, chat = refresh_display(session_st)
                     return result, room, chat, get_status(session_st), ""
 
                 def handle_direction(direction: str, session_st: dict):
+                    """
+                    Handle directional movement and refresh displays.
+
+                    Used by directional buttons (North, South, East, West).
+                    Sends movement command to backend, then refreshes all displays.
+
+                    Returns tuple for Gradio outputs: (command_result, room,
+                    chat, status, clear_chat_input)
+                    """
                     result = send_command(direction, session_st)
                     room, chat = refresh_display(session_st)
                     return result, room, chat, get_status(session_st), ""
 
                 def handle_refresh(session_st: dict):
+                    """
+                    Manually refresh all game displays.
+
+                    Used by the "Refresh Display" button to force an immediate
+                    update of room, chat, and status without executing a command.
+
+                    Returns tuple for Gradio outputs: (room, chat, status)
+                    """
                     room, chat = refresh_display(session_st)
                     return room, chat, get_status(session_st)
 
                 def handle_logout(session_st: dict):
+                    """
+                    Handle logout button click from game tab.
+
+                    Calls logout() and extracts message for display, clearing
+                    all game displays. Tab visibility changes are handled by
+                    separate logout_and_hide_tabs() function below.
+
+                    Returns tuple for Gradio outputs: (message, clear_room,
+                    clear_chat, clear_status, clear_chat_input)
+                    """
                     result = logout(session_st)
                     return result[1], "", "", "", ""  # return message only
 
                 def auto_refresh(session_st: dict):
-                    """Auto-refresh game state every tick."""
+                    """
+                    Auto-refresh game state on timer tick (every 3 seconds).
+
+                    Called automatically by the game_timer gr.Timer component.
+                    Only performs refresh if user is logged in to reduce server load.
+
+                    Returns:
+                        If logged in: tuple of (room, chat, status) with updated data
+                        If not logged in: tuple of gr.update() (no changes to UI)
+
+                    Note:
+                        This provides real-time visibility of other players' actions,
+                        chat messages, and world state changes.
+                    """
                     if session_st.get("logged_in"):
                         room, chat = refresh_display(session_st)
                         return room, chat, get_status(session_st)
                     return gr.update(), gr.update(), gr.update()  # No updates if not logged in
 
                 def handle_send(msg: str, session_st: dict):
-                    """Handle sending a chat message."""
+                    """
+                    Handle sending a chat message or command from chat input.
+
+                    Used by the chat input field and "Send" button. Supports both
+                    chat commands (/say, /yell, /whisper) and regular game commands.
+                    Appends [SYSTEM] result to chat display for visibility.
+
+                    Args:
+                        msg: Message or command entered by user
+                        session_st: Session state dictionary
+
+                    Returns:
+                        Tuple for Gradio outputs: (clear_chat_input, command_result,
+                        room, chat_with_system_msg, status)
+
+                    Note:
+                        Empty messages are ignored (no updates sent to UI).
+                    """
                     if not msg or not msg.strip():
                         return "", "", gr.update(), gr.update(), gr.update()  # Don't update if empty
                     result = send_command(msg, session_st)
@@ -943,6 +1429,13 @@ def create_interface():
                     )
 
                     def refresh_chat_with_limit(limit, session_st):
+                        """
+                        Refresh chat database view with configurable limit.
+
+                        Wrapper function that passes the limit dropdown value to
+                        get_database_chat(). Allows admin to view different amounts
+                        of chat history (50, 100, 200, or 500 messages).
+                        """
                         return get_database_chat(limit, session_st)
 
                     refresh_chat_btn.click(
@@ -952,6 +1445,17 @@ def create_interface():
                     )
 
                     def execute_manage_user(target, action, new_role, session_st):
+                        """
+                        Execute user management action and refresh displays.
+
+                        Calls manage_user() to perform the action (change_role, ban,
+                        unban), then automatically refreshes the players table to show
+                        the updated state. Also clears the input fields after execution.
+
+                        Returns:
+                            Tuple for Gradio outputs: (result_message, refreshed_players,
+                            clear_target_input, clear_role_input)
+                        """
                         result = manage_user(target, action, new_role, session_st)
                         # Also refresh players table after management action
                         players = get_database_players(session_st)
@@ -1034,6 +1538,24 @@ Each zone contains items you can collect.
         # Wire up logout button to update tab visibility
         # This needs to be separate from the Game tab handler because tabs aren't defined yet there
         def logout_and_hide_tabs(session_st):
+            """
+            Handle logout button click and update tab visibility.
+
+            This is a separate handler from the one in the Game tab because
+            tab visibility components need to be wired at the top level after
+            all tabs are defined. Calls logout() and extracts the relevant
+            outputs for session state, message, and tab visibility updates.
+
+            Returns:
+                Tuple for Gradio outputs: (session_state, message, login_tab,
+                register_tab, game_tab, settings_tab, database_tab, help_tab)
+                - login_tab, register_tab: Made visible
+                - game_tab, settings_tab, database_tab, help_tab: Hidden
+
+            Note:
+                The result indices [0], [1], [3]-[8] correspond to the return
+                tuple structure from logout() function.
+            """
             result = logout(session_st)
             return result[0], result[1], result[3], result[4], result[5], result[6], result[7], result[8]
 
