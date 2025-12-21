@@ -10,8 +10,9 @@ Interface Structure:
     Tab 2: Register - New account creation
     Tab 3: Game - Main gameplay interface with auto-refresh
     Tab 4: Settings - Password change and server control (admin only)
-    Tab 5: Database - Admin database viewer (admin only)
-    Tab 6: Help - Game instructions and command reference
+    Tab 5: Database - Admin database viewer (admin/superuser only)
+    Tab 6: Ollama - Ollama server management and AI model control (admin/superuser only)
+    Tab 7: Help - Game instructions and command reference
 
 Key Features:
     - Per-user session state using gr.State (prevents cross-user contamination)
@@ -73,8 +74,8 @@ def login(username: str, password: str, session_state: dict):
         session_state: User's session state dictionary
 
     Returns:
-        Tuple of (login_result, game_tab_visible, settings_tab_visible,
-                  db_tab_visible, user_info, session_state)
+        Tuple of (session_state, login_result, clear_username, clear_password,
+                  login_tab, register_tab, game_tab, settings_tab, db_tab, ollama_tab, help_tab)
     """
     if not username or len(username.strip()) < 2:
         return (
@@ -87,6 +88,7 @@ def login(username: str, password: str, session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
 
@@ -101,6 +103,7 @@ def login(username: str, password: str, session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
 
@@ -130,6 +133,7 @@ def login(username: str, password: str, session_state: dict):
                 gr.update(visible=True),  # game tab
                 gr.update(visible=True),  # settings tab
                 gr.update(visible=has_admin_access),  # database tab (admin/superuser only)
+                gr.update(visible=has_admin_access),  # ollama tab (admin/superuser only)
                 gr.update(visible=True),  # help tab
             )
         else:
@@ -144,6 +148,7 @@ def login(username: str, password: str, session_state: dict):
                 gr.update(visible=False),  # game tab
                 gr.update(visible=False),  # settings tab
                 gr.update(visible=False),  # database tab
+                gr.update(visible=False),  # ollama tab
                 gr.update(visible=False),  # help tab
             )
 
@@ -158,6 +163,7 @@ def login(username: str, password: str, session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
     except Exception as e:
@@ -171,6 +177,7 @@ def login(username: str, password: str, session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
 
@@ -252,7 +259,7 @@ def logout(session_state: dict):
     Returns:
         Tuple of (session_state, message, blank, login_tab_visible,
                   register_tab_visible, game_tab_hidden, settings_tab_hidden,
-                  db_tab_hidden, help_tab_hidden)
+                  db_tab_hidden, ollama_tab_hidden, help_tab_hidden)
 
     Side Effects:
         - Backend removes session from database and memory
@@ -269,6 +276,7 @@ def logout(session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
 
@@ -292,6 +300,7 @@ def logout(session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
 
@@ -305,6 +314,7 @@ def logout(session_state: dict):
             gr.update(visible=False),  # game tab
             gr.update(visible=False),  # settings tab
             gr.update(visible=False),  # database tab
+            gr.update(visible=False),  # ollama tab
             gr.update(visible=False),  # help tab
         )
 
@@ -602,6 +612,85 @@ def stop_server(session_state: dict) -> str:
 
     except requests.exceptions.ConnectionError:
         return f"Server stopped or cannot connect to {SERVER_URL}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+# ============================================================================
+# OLLAMA MANAGEMENT FUNCTIONS
+# ============================================================================
+
+
+def execute_ollama_command(server_url: str, command: str, session_state: dict) -> str:
+    """
+    Execute an Ollama command on the specified server (Admin/Superuser only).
+
+    Sends commands to the Ollama server via the backend API endpoint.
+    Supports common Ollama commands like list, ps, pull, run, and show.
+
+    Permission Check:
+        - Requires role in ["admin", "superuser"]
+        - Regular players will receive "Access Denied"
+
+    Args:
+        server_url: URL of the Ollama server (e.g., "http://localhost:11434")
+        command: Ollama command to execute (e.g., "list", "ps", "run llama2 Hello")
+        session_state: User's session state dictionary
+
+    Returns:
+        Command output or error message
+
+    Supported Commands:
+        - list/ls: List available models
+        - ps: Show running models
+        - pull <model>: Pull/download a model
+        - run <model> [prompt]: Run a model with optional prompt
+        - show <model>: Show model information
+
+    Examples:
+        - list
+        - ps
+        - pull llama2
+        - run llama2 Write a haiku about coding
+        - show llama2
+    """
+    if not session_state.get("logged_in"):
+        return "You are not logged in."
+
+    role = session_state.get("role", "player")
+    if role not in ["admin", "superuser"]:
+        return "Access Denied: Admin or Superuser role required."
+
+    if not server_url or not server_url.strip():
+        return "Server URL is required."
+
+    if not command or not command.strip():
+        return "Command is required."
+
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/admin/ollama/command",
+            json={
+                "session_id": session_state.get("session_id"),
+                "server_url": server_url.strip(),
+                "command": command.strip(),
+            },
+            timeout=300,  # 5 minute timeout for long operations like pull
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("output", "No output returned")
+        elif response.status_code == 403:
+            return "Access Denied: Insufficient permissions."
+        else:
+            error = response.json().get("detail", "Command execution failed")
+            return f"Error: {error}"
+
+    except requests.exceptions.ConnectionError:
+        return f"Cannot connect to server at {SERVER_URL}"
+    except requests.exceptions.Timeout:
+        return "Request timed out. Long operations like 'pull' may still be running. Check 'ps' to verify."
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -1484,6 +1573,99 @@ def create_interface():
                         ],
                     )
 
+            # Ollama Tab (visible only for admin/superuser)
+            with gr.Tab("Ollama", visible=False) as ollama_tab:
+                with gr.Column():
+                    gr.Markdown("### Ollama Management")
+                    gr.Markdown("*Admin and Superuser only*")
+                    gr.Markdown(
+                        """
+Control and interact with your Ollama server. This tab allows you to manage AI models,
+run inference, and monitor running models.
+
+**Supported Commands:**
+- `list` or `ls` - List all available models
+- `ps` - Show currently running models
+- `pull <model>` - Download a new model (e.g., `pull llama2`)
+- `run <model> [prompt]` - Run a model with optional prompt (e.g., `run llama2 Write a haiku`)
+- `show <model>` - Show detailed model information
+                        """
+                    )
+
+                    # Server URL Input
+                    gr.Markdown("#### Server Configuration")
+                    ollama_url_input = gr.Textbox(
+                        label="Ollama Server URL",
+                        placeholder="http://localhost:11434",
+                        value="http://localhost:11434",
+                        max_lines=1,
+                    )
+
+                    # Command Input
+                    gr.Markdown("#### Command")
+                    with gr.Row():
+                        ollama_command_input = gr.Textbox(
+                            label="Command",
+                            placeholder="Enter Ollama command (e.g., 'list', 'run llama2 Hello')",
+                            max_lines=1,
+                            scale=4,
+                        )
+                        execute_ollama_btn = gr.Button("Execute", variant="primary", scale=1)
+
+                    # Quick action buttons
+                    gr.Markdown("#### Quick Actions")
+                    with gr.Row():
+                        list_models_btn = gr.Button("List Models", scale=1)
+                        show_running_btn = gr.Button("Show Running", scale=1)
+
+                    # Output Console
+                    gr.Markdown("#### Console Output")
+                    ollama_output = gr.Textbox(
+                        label="Output",
+                        interactive=False,
+                        lines=20,
+                        max_lines=30,
+                        placeholder="Command output will appear here...",
+                    )
+
+                    # Event handlers for Ollama tab
+                    def handle_execute_ollama(url, cmd, session_st):
+                        """Execute Ollama command and return output."""
+                        return execute_ollama_command(url, cmd, session_st)
+
+                    def handle_list_models(url, session_st):
+                        """Quick action: List models."""
+                        return execute_ollama_command(url, "list", session_st)
+
+                    def handle_show_running(url, session_st):
+                        """Quick action: Show running models."""
+                        return execute_ollama_command(url, "ps", session_st)
+
+                    execute_ollama_btn.click(
+                        handle_execute_ollama,
+                        inputs=[ollama_url_input, ollama_command_input, session_state],
+                        outputs=[ollama_output],
+                    )
+
+                    # Also submit on Enter key in command input
+                    ollama_command_input.submit(
+                        handle_execute_ollama,
+                        inputs=[ollama_url_input, ollama_command_input, session_state],
+                        outputs=[ollama_output],
+                    )
+
+                    list_models_btn.click(
+                        handle_list_models,
+                        inputs=[ollama_url_input, session_state],
+                        outputs=[ollama_output],
+                    )
+
+                    show_running_btn.click(
+                        handle_show_running,
+                        inputs=[ollama_url_input, session_state],
+                        outputs=[ollama_output],
+                    )
+
             # Help Tab (visible only when logged in)
             with gr.Tab("Help", visible=False) as help_tab:
                 gr.Markdown(
@@ -1550,6 +1732,7 @@ Each zone contains items you can collect.
                 game_tab,
                 settings_tab,
                 database_tab,
+                ollama_tab,
                 help_tab,
             ],
         )
@@ -1567,12 +1750,12 @@ Each zone contains items you can collect.
 
             Returns:
                 Tuple for Gradio outputs: (session_state, message, login_tab,
-                register_tab, game_tab, settings_tab, database_tab, help_tab)
+                register_tab, game_tab, settings_tab, database_tab, ollama_tab, help_tab)
                 - login_tab, register_tab: Made visible
-                - game_tab, settings_tab, database_tab, help_tab: Hidden
+                - game_tab, settings_tab, database_tab, ollama_tab, help_tab: Hidden
 
             Note:
-                The result indices [0], [1], [3]-[8] correspond to the return
+                The result indices [0], [1], [3]-[9] correspond to the return
                 tuple structure from logout() function.
             """
             result = logout(session_st)
@@ -1585,6 +1768,7 @@ Each zone contains items you can collect.
                 result[6],
                 result[7],
                 result[8],
+                result[9],
             )
 
         logout_btn.click(
@@ -1598,6 +1782,7 @@ Each zone contains items you can collect.
                 game_tab,
                 settings_tab,
                 database_tab,
+                ollama_tab,
                 help_tab,
             ],
         )

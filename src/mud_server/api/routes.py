@@ -58,6 +58,8 @@ from mud_server.api.models import (
     LoginRequest,
     LoginResponse,
     LogoutRequest,
+    OllamaCommandRequest,
+    OllamaCommandResponse,
     RegisterRequest,
     RegisterResponse,
     ServerStopRequest,
@@ -531,6 +533,182 @@ Note: Commands can be used with or without the / prefix
             success=True,
             message=f"Server shutdown initiated by {username}. Server will stop in 0.5 seconds.",
         )
+
+    @app.post("/admin/ollama/command", response_model=OllamaCommandResponse)
+    async def execute_ollama_command(request: OllamaCommandRequest):
+        """
+        Execute an Ollama command (Admin and Superuser only).
+
+        Sends commands to the Ollama server API and returns the output.
+        Supports any ollama CLI command via the API.
+        """
+        username, role = validate_session_with_permission(
+            request.session_id, Permission.MANAGE_USERS
+        )
+
+        import json
+        import subprocess
+
+        try:
+            server_url = request.server_url.strip()
+            command = request.command.strip()
+
+            if not server_url or not command:
+                return OllamaCommandResponse(
+                    success=False, output="Server URL and command are required"
+                )
+
+            # Use requests library to interact with Ollama API
+            import requests as req
+
+            # Parse the command to determine the appropriate API endpoint
+            cmd_parts = command.split()
+            cmd_verb = cmd_parts[0].lower()
+
+            # Map common ollama commands to API endpoints
+            if cmd_verb == "list" or cmd_verb == "ls":
+                # List models via API
+                response = req.get(f"{server_url}/api/tags", timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    models = data.get("models", [])
+                    if models:
+                        output = "Available models:\n"
+                        for model in models:
+                            name = model.get("name", "unknown")
+                            size = model.get("size", 0)
+                            modified = model.get("modified_at", "")
+                            output += f"  - {name} (size: {size}, modified: {modified})\n"
+                    else:
+                        output = "No models found."
+                    return OllamaCommandResponse(success=True, output=output)
+                else:
+                    return OllamaCommandResponse(
+                        success=False,
+                        output=f"Failed to list models: HTTP {response.status_code}",
+                    )
+
+            elif cmd_verb == "ps":
+                # Show running models
+                response = req.get(f"{server_url}/api/ps", timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    models = data.get("models", [])
+                    if models:
+                        output = "Running models:\n"
+                        for model in models:
+                            name = model.get("name", "unknown")
+                            output += f"  - {name}\n"
+                    else:
+                        output = "No models currently running."
+                    return OllamaCommandResponse(success=True, output=output)
+                else:
+                    return OllamaCommandResponse(
+                        success=False, output=f"Failed to show running models: HTTP {response.status_code}"
+                    )
+
+            elif cmd_verb == "pull":
+                # Pull a model
+                if len(cmd_parts) < 2:
+                    return OllamaCommandResponse(
+                        success=False, output="Usage: pull <model_name>"
+                    )
+                model_name = cmd_parts[1]
+
+                # Pull is a streaming endpoint
+                response = req.post(
+                    f"{server_url}/api/pull",
+                    json={"name": model_name},
+                    stream=True,
+                    timeout=300,
+                )
+
+                if response.status_code == 200:
+                    output = f"Pulling model '{model_name}'...\n"
+                    for line in response.iter_lines():
+                        if line:
+                            data = json.loads(line)
+                            status = data.get("status", "")
+                            output += f"{status}\n"
+                            if data.get("error"):
+                                return OllamaCommandResponse(
+                                    success=False, output=f"Error: {data.get('error')}"
+                                )
+                    return OllamaCommandResponse(success=True, output=output)
+                else:
+                    return OllamaCommandResponse(
+                        success=False, output=f"Failed to pull model: HTTP {response.status_code}"
+                    )
+
+            elif cmd_verb == "run":
+                # Run a model with a prompt
+                if len(cmd_parts) < 2:
+                    return OllamaCommandResponse(
+                        success=False, output="Usage: run <model_name> [prompt]"
+                    )
+
+                model_name = cmd_parts[1]
+                prompt = " ".join(cmd_parts[2:]) if len(cmd_parts) > 2 else "Hello"
+
+                response = req.post(
+                    f"{server_url}/api/generate",
+                    json={"model": model_name, "prompt": prompt, "stream": False},
+                    timeout=120,
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    generated_text = data.get("response", "")
+                    output = f"Model: {model_name}\nPrompt: {prompt}\n\nResponse:\n{generated_text}"
+                    return OllamaCommandResponse(success=True, output=output)
+                else:
+                    error_detail = response.text
+                    return OllamaCommandResponse(
+                        success=False,
+                        output=f"Failed to run model: HTTP {response.status_code}\n{error_detail}",
+                    )
+
+            elif cmd_verb == "show":
+                # Show model information
+                if len(cmd_parts) < 2:
+                    return OllamaCommandResponse(
+                        success=False, output="Usage: show <model_name>"
+                    )
+                model_name = cmd_parts[1]
+
+                response = req.post(
+                    f"{server_url}/api/show",
+                    json={"name": model_name},
+                    timeout=10,
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    output = f"Model: {model_name}\n"
+                    output += f"Modelfile:\n{data.get('modelfile', 'N/A')}\n"
+                    output += f"Parameters:\n{data.get('parameters', 'N/A')}\n"
+                    return OllamaCommandResponse(success=True, output=output)
+                else:
+                    return OllamaCommandResponse(
+                        success=False, output=f"Failed to show model info: HTTP {response.status_code}"
+                    )
+
+            else:
+                return OllamaCommandResponse(
+                    success=False,
+                    output=f"Unknown command: {cmd_verb}\nSupported commands: list, ps, pull, run, show",
+                )
+
+        except req.exceptions.ConnectionError:
+            return OllamaCommandResponse(
+                success=False, output=f"Cannot connect to Ollama server at {server_url}"
+            )
+        except req.exceptions.Timeout:
+            return OllamaCommandResponse(
+                success=False, output="Request timed out. The operation may still be in progress."
+            )
+        except Exception as e:
+            return OllamaCommandResponse(success=False, output=f"Error: {str(e)}")
 
     @app.get("/health")
     async def health_check():

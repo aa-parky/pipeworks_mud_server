@@ -13,7 +13,7 @@ Models are organized into two categories:
 2. Response models: Data sent FROM the server TO the client
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -324,3 +324,33 @@ class ServerStopResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class OllamaCommandRequest(BaseModel):
+    """
+    Request to execute an Ollama command.
+
+    Requires MANAGE_USERS permission (admin or superuser only).
+
+    Attributes:
+        session_id: Active session ID (must have appropriate permission)
+        server_url: URL of the Ollama server (e.g., "http://localhost:11434")
+        command: Ollama command to execute (e.g., "list", "ps", "run llama2")
+    """
+
+    session_id: str
+    server_url: str
+    command: str
+
+
+class OllamaCommandResponse(BaseModel):
+    """
+    Response to Ollama command execution.
+
+    Attributes:
+        success: True if command executed successfully
+        output: Command output or error message
+    """
+
+    success: bool
+    output: str
