@@ -127,12 +127,10 @@ def register_routes(app: FastAPI, engine: GameEngine):
         if command.startswith("/"):
             command = command[1:]
 
-        command = command.lower()
-
-        # Parse command
+        # Parse command (only lowercase the verb, keep args case-sensitive)
         parts = command.split(maxsplit=1)
-        cmd = parts[0]
-        args = parts[1] if len(parts) > 1 else ""
+        cmd = parts[0].lower()  # Command verb is case-insensitive
+        args = parts[1] if len(parts) > 1 else ""  # Arguments preserve case (e.g., player names)
 
         # Handle commands
         if cmd in ["n", "north", "s", "south", "e", "east", "w", "west"]:
@@ -176,9 +174,9 @@ def register_routes(app: FastAPI, engine: GameEngine):
         elif cmd == "yell":
             if not args:
                 return CommandResponse(success=False, message="Yell what?")
-            # Yell sends to all rooms (broadcast)
-            success, message = engine.chat(username, f"[YELL] {args}")
-            return CommandResponse(success=success, message=f"You yell: {args}")
+            # Yell sends to current room and all adjoining rooms
+            success, message = engine.yell(username, args)
+            return CommandResponse(success=success, message=message)
 
         elif cmd in ["whisper", "w"]:
             if not args:
@@ -189,10 +187,9 @@ def register_routes(app: FastAPI, engine: GameEngine):
                 return CommandResponse(success=False, message="Whisper what? Usage: /whisper <player> <message>")
             target = whisper_parts[0]
             msg = whisper_parts[1]
-            # For now, just send as regular chat with [WHISPER] prefix
-            # TODO: Implement private messaging
-            success, message = engine.chat(username, f"[WHISPER to {target}] {msg}")
-            return CommandResponse(success=success, message=f"You whisper to {target}: {msg}")
+            # Send private whisper
+            success, message = engine.whisper(username, target, msg)
+            return CommandResponse(success=success, message=message)
 
         elif cmd == "who":
             players = engine.get_active_players()
@@ -216,8 +213,8 @@ Actions:
 
 Communication:
   /say <message> - Send a message to the current room
-  /yell <message> - Yell to all rooms (everyone hears)
-  /whisper <player> <message> - Whisper to a specific player
+  /yell <message> - Yell to current room and adjoining rooms
+  /whisper <player> <message> - Send private message (only you and target see it)
 
 Other:
   /who - List active players

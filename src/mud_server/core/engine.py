@@ -102,13 +102,80 @@ class GameEngine:
 
         return True, f"You say: {message}"
 
+    def yell(self, username: str, message: str) -> Tuple[bool, str]:
+        """Yell to current room and all adjoining rooms."""
+        current_room_id = database.get_player_room(username)
+        if not current_room_id:
+            return False, "You are not in a valid room."
+
+        # Get current room to find adjoining rooms
+        current_room = self.world.get_room(current_room_id)
+        if not current_room:
+            return False, "Invalid room."
+
+        # Add [YELL] prefix to message
+        yell_message = f"[YELL] {message}"
+
+        # Send to current room
+        if not database.add_chat_message(username, yell_message, current_room_id):
+            return False, "Failed to send message."
+
+        # Send to all adjoining rooms
+        for direction, room_id in current_room.exits.items():
+            database.add_chat_message(username, yell_message, room_id)
+
+        return True, f"You yell: {message}"
+
+    def whisper(self, username: str, target: str, message: str) -> Tuple[bool, str]:
+        """Send a private whisper to a specific player in the same room."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        sender_room = database.get_player_room(username)
+        logger.info(f"Whisper: {username} in room {sender_room} attempting to whisper to {target}")
+
+        if not sender_room:
+            logger.warning(f"Whisper failed: {username} not in valid room")
+            return False, "You are not in a valid room."
+
+        # Check if target player exists
+        if not database.player_exists(target):
+            logger.warning(f"Whisper failed: target {target} does not exist")
+            return False, f"Player '{target}' does not exist."
+
+        # Check if target is online (has an active session)
+        active_players = database.get_active_players()
+        logger.info(f"Active players: {active_players}")
+        if target not in active_players:
+            logger.warning(f"Whisper failed: target {target} not online")
+            return False, f"Player '{target}' is not online."
+
+        # Check if target is in the same room
+        target_room = database.get_player_room(target)
+        logger.info(f"Target {target} is in room {target_room}")
+        if target_room != sender_room:
+            logger.warning(f"Whisper failed: {target} in {target_room}, sender in {sender_room}")
+            return False, f"Player '{target}' is not in this room."
+
+        # Add whisper message with recipient (include both sender and target for clarity)
+        whisper_message = f"[WHISPER: {username} → {target}] {message}"
+        result = database.add_chat_message(username, whisper_message, sender_room, recipient=target)
+        logger.info(f"Whisper message save result: {result}")
+
+        if not result:
+            logger.error("Failed to save whisper to database")
+            return False, "Failed to send whisper."
+
+        logger.info(f"Whisper successful: {username} -> {target}: {message}")
+        return True, f"You whisper to {target}: {message}"
+
     def get_room_chat(self, username: str, limit: int = 20) -> str:
-        """Get recent chat from current room."""
+        """Get recent chat from current room, filtered for this user."""
         room = database.get_player_room(username)
         if not room:
             return "No messages."
 
-        messages = database.get_room_messages(room, limit)
+        messages = database.get_room_messages(room, limit, username=username)
         if not messages:
             return "[No messages in this room yet]"
 

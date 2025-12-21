@@ -644,7 +644,7 @@ def create_interface():
                 with gr.Row():
                     chat_input = gr.Textbox(
                         label="Send Message",
-                        placeholder="Type: /say <message> or /yell <message> or /whisper <player> <message>",
+                        placeholder="Type: /say <message> (room only) or /yell <message> (adjoining rooms)",
                         max_lines=1,
                         scale=4,
                     )
@@ -709,10 +709,14 @@ def create_interface():
                 def handle_send(msg: str, session_st: dict):
                     """Handle sending a chat message."""
                     if not msg or not msg.strip():
-                        return "", gr.update(), gr.update(), gr.update()  # Don't update if empty
+                        return "", "", gr.update(), gr.update(), gr.update()  # Don't update if empty
                     result = send_command(msg, session_st)
-                    room, chat = refresh_display(session_st)
-                    return "", room, chat, get_status(session_st)  # Clear input after sending
+                    room, chat_msgs = refresh_display(session_st)
+
+                    # Append command result to chat for visibility
+                    chat_with_result = chat_msgs + f"\n[SYSTEM] {result}"
+
+                    return "", result, room, chat_with_result, get_status(session_st)  # Clear chat input, show result
 
                 # Button click handlers
                 north_btn.click(
@@ -766,14 +770,14 @@ def create_interface():
                 send_btn.click(
                     handle_send,
                     inputs=[chat_input, session_state],
-                    outputs=[chat_input, room_display, chat_display, status_display],
+                    outputs=[chat_input, command_input, room_display, chat_display, status_display],
                 )
 
                 # Also submit on Enter key in chat input
                 chat_input.submit(
                     handle_send,
                     inputs=[chat_input, session_state],
-                    outputs=[chat_input, room_display, chat_display, status_display],
+                    outputs=[chat_input, command_input, room_display, chat_display, status_display],
                 )
 
                 refresh_btn.click(
@@ -986,8 +990,8 @@ All commands can use the `/` prefix (e.g., `/look`) but it's optional.
 
 ### Communication
 - `/say <message>` - Send a message to players in your current room
-- `/yell <message>` - Yell to ALL rooms (everyone hears)
-- `/whisper <player> <message>` - Whisper to a specific player
+- `/yell <message>` - Yell to current room and adjoining rooms
+- `/whisper <player> <message>` - Send private message (only you and target see it)
 
 ### Other
 - `/who` - See who else is online

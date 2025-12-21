@@ -40,6 +40,7 @@ def init_database():
             username TEXT NOT NULL,
             message TEXT NOT NULL,
             room TEXT NOT NULL,
+            recipient TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -334,14 +335,14 @@ def set_player_inventory(username: str, inventory: List[str]) -> bool:
         return False
 
 
-def add_chat_message(username: str, message: str, room: str) -> bool:
-    """Add a chat message to the database."""
+def add_chat_message(username: str, message: str, room: str, recipient: Optional[str] = None) -> bool:
+    """Add a chat message to the database. If recipient is provided, it's a private whisper."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO chat_messages (username, message, room) VALUES (?, ?, ?)",
-            (username, message, room),
+            "INSERT INTO chat_messages (username, message, room, recipient) VALUES (?, ?, ?, ?)",
+            (username, message, room, recipient),
         )
         conn.commit()
         conn.close()
@@ -350,26 +351,45 @@ def add_chat_message(username: str, message: str, room: str) -> bool:
         return False
 
 
-def get_room_messages(room: str, limit: int = 50) -> List[Dict[str, Any]]:
-    """Get recent messages from a room."""
+def get_room_messages(room: str, limit: int = 50, username: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get recent messages from a room. Filters whispers based on username."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT username, message, timestamp FROM chat_messages
-        WHERE room = ?
-        ORDER BY timestamp DESC
-        LIMIT ?
-    """,
-        (room, limit),
-    )
+
+    if username:
+        # Filter messages: public messages OR whispers to/from this user
+        cursor.execute(
+            """
+            SELECT username, message, timestamp FROM chat_messages
+            WHERE room = ? AND (
+                recipient IS NULL OR
+                recipient = ? OR
+                username = ?
+            )
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """,
+            (room, username, username, limit),
+        )
+    else:
+        # No filtering, show all messages
+        cursor.execute(
+            """
+            SELECT username, message, timestamp FROM chat_messages
+            WHERE room = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """,
+            (room, limit),
+        )
+
     results = cursor.fetchall()
     conn.close()
 
     messages = []
-    for username, message, timestamp in reversed(results):
+    for user, message, timestamp in reversed(results):
         messages.append(
-            {"username": username, "message": message, "timestamp": timestamp}
+            {"username": user, "message": message, "timestamp": timestamp}
         )
     return messages
 
