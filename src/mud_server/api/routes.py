@@ -1,6 +1,8 @@
 """API route definitions."""
 
 import uuid
+import os
+import signal
 from fastapi import FastAPI, HTTPException
 from typing import List
 
@@ -9,6 +11,7 @@ from mud_server.api.models import (
     RegisterRequest,
     ChangePasswordRequest,
     UserManagementRequest,
+    ServerStopRequest,
     CommandRequest,
     LoginResponse,
     RegisterResponse,
@@ -19,6 +22,7 @@ from mud_server.api.models import (
     DatabaseSessionsResponse,
     DatabaseChatResponse,
     UserManagementResponse,
+    ServerStopResponse,
 )
 from mud_server.api.auth import validate_session, active_sessions, validate_session_with_permission
 from mud_server.api.permissions import Permission, has_permission, can_manage_role
@@ -348,6 +352,27 @@ def register_routes(app: FastAPI, engine: GameEngine):
                 status_code=400,
                 detail=f"Invalid action '{action}'. Valid actions: change_role, ban, unban",
             )
+
+    @app.post("/admin/server/stop", response_model=ServerStopResponse)
+    async def stop_server(request: ServerStopRequest):
+        """Stop the server (Admin and Superuser only)."""
+        username, role = validate_session_with_permission(
+            request.session_id, Permission.STOP_SERVER
+        )
+
+        # Schedule server shutdown after a brief delay to allow response to be sent
+        import asyncio
+
+        async def shutdown():
+            await asyncio.sleep(0.5)  # Give time for response to be sent
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        asyncio.create_task(shutdown())
+
+        return ServerStopResponse(
+            success=True,
+            message=f"Server shutdown initiated by {username}. Server will stop in 0.5 seconds."
+        )
 
     @app.get("/health")
     async def health_check():

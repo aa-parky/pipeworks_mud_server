@@ -9,14 +9,12 @@ import os
 # Configuration
 SERVER_URL = os.getenv("MUD_SERVER_URL", "http://localhost:8000")
 
-# Global state
-session_data = {"session_id": None, "username": None, "role": None, "logged_in": False}
 
-
-def login(username: str, password: str):
+def login(username: str, password: str, session_state: dict):
     """Handle login with password and update tab visibility."""
     if not username or len(username.strip()) < 2:
         return (
+            session_state,
             "Username must be at least 2 characters.",
             "",
             "",
@@ -30,6 +28,7 @@ def login(username: str, password: str):
 
     if not password:
         return (
+            session_state,
             "Password is required.",
             "",
             "",
@@ -49,15 +48,16 @@ def login(username: str, password: str):
 
         if response.status_code == 200:
             data = response.json()
-            session_data["session_id"] = data["session_id"]
-            session_data["username"] = username.strip()
-            session_data["role"] = data.get("role", "player")
-            session_data["logged_in"] = True
+            session_state["session_id"] = data["session_id"]
+            session_state["username"] = username.strip()
+            session_state["role"] = data.get("role", "player")
+            session_state["logged_in"] = True
 
             # Determine if user has admin/superuser access
-            has_admin_access = session_data["role"] in ["admin", "superuser"]
+            has_admin_access = session_state["role"] in ["admin", "superuser"]
 
             return (
+                session_state,
                 data["message"],
                 "",
                 "",
@@ -71,6 +71,7 @@ def login(username: str, password: str):
         else:
             error = response.json().get("detail", "Login failed")
             return (
+                session_state,
                 f"Login failed: {error}",
                 "",
                 "",
@@ -84,6 +85,7 @@ def login(username: str, password: str):
 
     except requests.exceptions.ConnectionError:
         return (
+            session_state,
             f"Cannot connect to server at {SERVER_URL}",
             "",
             "",
@@ -96,6 +98,7 @@ def login(username: str, password: str):
         )
     except Exception as e:
         return (
+            session_state,
             f"Error: {str(e)}",
             "",
             "",
@@ -142,10 +145,11 @@ def register(username: str, password: str, password_confirm: str) -> str:
         return f"Error: {str(e)}"
 
 
-def logout():
+def logout(session_state: dict):
     """Handle logout and reset tab visibility."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return (
+            session_state,
             "Not logged in.",
             "",
             gr.update(visible=True),  # login tab
@@ -159,15 +163,16 @@ def logout():
     try:
         response = requests.post(
             f"{SERVER_URL}/logout",
-            json={"session_id": session_data["session_id"], "command": "logout"},
+            json={"session_id": session_state.get("session_id"), "command": "logout"},
         )
 
-        session_data["session_id"] = None
-        session_data["username"] = None
-        session_data["role"] = None
-        session_data["logged_in"] = False
+        session_state["session_id"] = None
+        session_state["username"] = None
+        session_state["role"] = None
+        session_state["logged_in"] = False
 
         return (
+            session_state,
             "You have been logged out.",
             "",
             gr.update(visible=True),  # login tab
@@ -180,6 +185,7 @@ def logout():
 
     except Exception as e:
         return (
+            session_state,
             f"Error: {str(e)}",
             "",
             gr.update(visible=True),  # login tab
@@ -191,9 +197,9 @@ def logout():
         )
 
 
-def send_command(command: str) -> str:
+def send_command(command: str, session_state: dict) -> str:
     """Send a command to the server."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
     if not command or not command.strip():
@@ -202,14 +208,14 @@ def send_command(command: str) -> str:
     try:
         response = requests.post(
             f"{SERVER_URL}/command",
-            json={"session_id": session_data["session_id"], "command": command},
+            json={"session_id": session_state.get("session_id"), "command": command},
         )
 
         if response.status_code == 200:
             data = response.json()
             return data["message"]
         elif response.status_code == 401:
-            session_data["logged_in"] = False
+            session_state["logged_in"] = False
             return "Session expired. Please log in again."
         else:
             error = response.json().get("detail", "Command failed")
@@ -221,14 +227,14 @@ def send_command(command: str) -> str:
         return f"Error: {str(e)}"
 
 
-def get_chat() -> str:
+def get_chat(session_state: dict) -> str:
     """Get recent chat messages."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
     try:
         response = requests.get(
-            f"{SERVER_URL}/chat/{session_data['session_id']}"
+            f"{SERVER_URL}/chat/{session_state.get('session_id')}"
         )
 
         if response.status_code == 200:
@@ -241,22 +247,22 @@ def get_chat() -> str:
         return f"Error: {str(e)}"
 
 
-def get_status() -> str:
+def get_status(session_state: dict) -> str:
     """Get player status."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
     try:
         response = requests.get(
-            f"{SERVER_URL}/status/{session_data['session_id']}"
+            f"{SERVER_URL}/status/{session_state.get('session_id')}"
         )
 
         if response.status_code == 200:
             data = response.json()
-            role_display = session_data.get('role', 'player').capitalize()
+            role_display = session_state.get('role', 'player').capitalize()
             status = f"""
 [Player Status]
-Username: {session_data['username']}
+Username: {session_state.get('username')}
 Role: {role_display}
 Current Room: {data['current_room']}
 Active Players: {', '.join(data['active_players']) if data['active_players'] else 'None'}
@@ -271,20 +277,20 @@ Active Players: {', '.join(data['active_players']) if data['active_players'] els
         return f"Error: {str(e)}"
 
 
-def refresh_display() -> Tuple[str, str]:
+def refresh_display(session_state: dict) -> Tuple[str, str]:
     """Refresh the display with current room and chat."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "Not logged in.", ""
 
-    room_info = send_command("look")
-    chat_info = get_chat()
+    room_info = send_command("look", session_state)
+    chat_info = get_chat(session_state)
 
     return room_info, chat_info
 
 
-def change_password(old_password: str, new_password: str, confirm_password: str) -> str:
+def change_password(old_password: str, new_password: str, confirm_password: str, session_state: dict) -> str:
     """Change user password."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
     if not old_password:
@@ -303,7 +309,7 @@ def change_password(old_password: str, new_password: str, confirm_password: str)
         response = requests.post(
             f"{SERVER_URL}/change-password",
             json={
-                "session_id": session_data["session_id"],
+                "session_id": session_state.get("session_id"),
                 "old_password": old_password,
                 "new_password": new_password,
             },
@@ -322,19 +328,49 @@ def change_password(old_password: str, new_password: str, confirm_password: str)
         return f"Error: {str(e)}"
 
 
-def get_database_players() -> str:
-    """Fetch and format players table for display (Admin only)."""
-    if not session_data["logged_in"]:
+def stop_server(session_state: dict) -> str:
+    """Stop the server (Admin/Superuser only)."""
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
-    role = session_data.get("role", "player")
+    role = session_state.get("role", "player")
+    if role not in ["admin", "superuser"]:
+        return "Access Denied: Admin or Superuser role required."
+
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/admin/server/stop",
+            json={"session_id": session_state.get("session_id")},
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return f"✅ {data['message']}"
+        elif response.status_code == 403:
+            return "Access Denied: Insufficient permissions."
+        else:
+            error = response.json().get("detail", "Failed to stop server")
+            return f"❌ {error}"
+
+    except requests.exceptions.ConnectionError:
+        return f"Server stopped or cannot connect to {SERVER_URL}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+def get_database_players(session_state: dict) -> str:
+    """Fetch and format players table for display (Admin only)."""
+    if not session_state.get("logged_in"):
+        return "You are not logged in."
+
+    role = session_state.get("role", "player")
     if role not in ["admin", "superuser"]:
         return "Access Denied: Admin or Superuser role required."
 
     try:
         response = requests.get(
             f"{SERVER_URL}/admin/database/players",
-            params={"session_id": session_data["session_id"]},
+            params={"session_id": session_state.get("session_id")},
         )
 
         if response.status_code == 200:
@@ -373,19 +409,19 @@ def get_database_players() -> str:
         return f"Error: {str(e)}"
 
 
-def get_database_sessions() -> str:
+def get_database_sessions(session_state: dict) -> str:
     """Fetch and format sessions table for display (Admin only)."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
-    role = session_data.get("role", "player")
+    role = session_state.get("role", "player")
     if role not in ["admin", "superuser"]:
         return "Access Denied: Admin or Superuser role required."
 
     try:
         response = requests.get(
             f"{SERVER_URL}/admin/database/sessions",
-            params={"session_id": session_data["session_id"]},
+            params={"session_id": session_state.get("session_id")},
         )
 
         if response.status_code == 200:
@@ -419,19 +455,19 @@ def get_database_sessions() -> str:
         return f"Error: {str(e)}"
 
 
-def get_database_chat(limit: int = 100) -> str:
+def get_database_chat(limit: int, session_state: dict) -> str:
     """Fetch and format chat messages for display (Admin only)."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
-    role = session_data.get("role", "player")
+    role = session_state.get("role", "player")
     if role not in ["admin", "superuser"]:
         return "Access Denied: Admin or Superuser role required."
 
     try:
         response = requests.get(
             f"{SERVER_URL}/admin/database/chat-messages",
-            params={"session_id": session_data["session_id"], "limit": limit},
+            params={"session_id": session_state.get("session_id"), "limit": limit},
         )
 
         if response.status_code == 200:
@@ -462,12 +498,12 @@ def get_database_chat(limit: int = 100) -> str:
         return f"Error: {str(e)}"
 
 
-def manage_user(target_username: str, action: str, new_role: str = "") -> str:
+def manage_user(target_username: str, action: str, new_role: str, session_state: dict) -> str:
     """Perform user management action (Admin only)."""
-    if not session_data["logged_in"]:
+    if not session_state.get("logged_in"):
         return "You are not logged in."
 
-    role = session_data.get("role", "player")
+    role = session_state.get("role", "player")
     if role not in ["admin", "superuser"]:
         return "Access Denied: Admin or Superuser role required."
 
@@ -479,7 +515,7 @@ def manage_user(target_username: str, action: str, new_role: str = "") -> str:
 
     try:
         request_data = {
-            "session_id": session_data["session_id"],
+            "session_id": session_state.get("session_id"),
             "target_username": target_username.strip(),
             "action": action,
         }
@@ -514,6 +550,9 @@ def create_interface():
     with gr.Blocks(title="MUD Client", theme=gr.themes.Soft()) as interface:
         gr.Markdown("# MUD Client")
         gr.Markdown("A simple Multi-User Dungeon client")
+
+        # Session state (per-user)
+        session_state = gr.State({"session_id": None, "username": None, "role": None, "logged_in": False})
 
         with gr.Tabs():
             # Login Tab (always visible)
@@ -637,121 +676,141 @@ def create_interface():
                     logout_btn = gr.Button("Logout", variant="stop")
 
                 # Command handlers
-                def handle_command(cmd: str):
-                    result = send_command(cmd)
-                    room, chat = refresh_display()
-                    return result, room, chat, get_status(), ""
+                def handle_command(cmd: str, session_st: dict):
+                    result = send_command(cmd, session_st)
+                    room, chat = refresh_display(session_st)
+                    return result, room, chat, get_status(session_st), ""
 
-                def handle_direction(direction: str):
-                    result = send_command(direction)
-                    room, chat = refresh_display()
-                    return result, room, chat, get_status(), ""
+                def handle_direction(direction: str, session_st: dict):
+                    result = send_command(direction, session_st)
+                    room, chat = refresh_display(session_st)
+                    return result, room, chat, get_status(session_st), ""
 
-                def handle_refresh():
-                    room, chat = refresh_display()
-                    return room, chat, get_status()
+                def handle_refresh(session_st: dict):
+                    room, chat = refresh_display(session_st)
+                    return room, chat, get_status(session_st)
 
-                def handle_logout():
-                    logout()
-                    return "Logged out.", "", "", "", ""
+                def handle_logout(session_st: dict):
+                    result = logout(session_st)
+                    return result[1], "", "", "", ""  # return message only
 
                 # Button click handlers
                 north_btn.click(
                     handle_direction,
-                    inputs=[gr.State("north")],
+                    inputs=[gr.State("north"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
                 south_btn.click(
                     handle_direction,
-                    inputs=[gr.State("south")],
+                    inputs=[gr.State("south"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
                 east_btn.click(
                     handle_direction,
-                    inputs=[gr.State("east")],
+                    inputs=[gr.State("east"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
                 west_btn.click(
                     handle_direction,
-                    inputs=[gr.State("west")],
+                    inputs=[gr.State("west"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
 
                 look_btn.click(
                     handle_command,
-                    inputs=[gr.State("look")],
+                    inputs=[gr.State("look"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
                 inventory_btn.click(
                     handle_command,
-                    inputs=[gr.State("inventory")],
+                    inputs=[gr.State("inventory"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
                 who_btn.click(
                     handle_command,
-                    inputs=[gr.State("who")],
+                    inputs=[gr.State("who"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
                 help_btn.click(
                     handle_command,
-                    inputs=[gr.State("help")],
+                    inputs=[gr.State("help"), session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
 
                 command_btn.click(
                     handle_command,
-                    inputs=[command_input],
+                    inputs=[command_input, session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
 
                 refresh_btn.click(
                     handle_refresh,
+                    inputs=[session_state],
                     outputs=[room_display, chat_display, status_display],
                 )
 
                 logout_btn.click(
                     handle_logout,
+                    inputs=[session_state],
                     outputs=[command_input, room_display, chat_display, status_display, chat_input],
                 )
 
             # Settings Tab (visible only when logged in)
             with gr.Tab("Settings", visible=False) as settings_tab:
                 with gr.Column():
-                    gr.Markdown("### Change Password")
-                    gr.Markdown("Update your account password")
+                    # Password Change Section (Collapsible)
+                    with gr.Accordion("Change Password", open=False):
+                        gr.Markdown("Update your account password")
 
-                    current_password_input = gr.Textbox(
-                        label="Current Password",
-                        placeholder="Enter your current password",
-                        type="password",
-                        max_lines=1,
-                    )
-                    new_password_input = gr.Textbox(
-                        label="New Password",
-                        placeholder="Enter new password (min 8 characters)",
-                        type="password",
-                        max_lines=1,
-                    )
-                    confirm_new_password_input = gr.Textbox(
-                        label="Confirm New Password",
-                        placeholder="Re-enter new password",
-                        type="password",
-                        max_lines=1,
-                    )
-                    change_password_btn = gr.Button("Change Password", variant="primary")
-                    change_password_output = gr.Textbox(
-                        label="Status", interactive=False, lines=5
-                    )
+                        current_password_input = gr.Textbox(
+                            label="Current Password",
+                            placeholder="Enter your current password",
+                            type="password",
+                            max_lines=1,
+                        )
+                        new_password_input = gr.Textbox(
+                            label="New Password",
+                            placeholder="Enter new password (min 8 characters)",
+                            type="password",
+                            max_lines=1,
+                        )
+                        confirm_new_password_input = gr.Textbox(
+                            label="Confirm New Password",
+                            placeholder="Re-enter new password",
+                            type="password",
+                            max_lines=1,
+                        )
+                        change_password_btn = gr.Button("Change Password", variant="primary")
+                        change_password_output = gr.Textbox(
+                            label="Status", interactive=False, lines=5
+                        )
 
-                    change_password_btn.click(
-                        change_password,
-                        inputs=[
-                            current_password_input,
-                            new_password_input,
-                            confirm_new_password_input,
-                        ],
-                        outputs=[change_password_output],
-                    )
+                        change_password_btn.click(
+                            change_password,
+                            inputs=[
+                                current_password_input,
+                                new_password_input,
+                                confirm_new_password_input,
+                                session_state,
+                            ],
+                            outputs=[change_password_output],
+                        )
+
+                    # Server Control Section (Admin/Superuser only)
+                    gr.Markdown("---")
+                    with gr.Accordion("Server Control (Admin/Superuser)", open=False):
+                        gr.Markdown("**Warning:** This will stop the entire server!")
+
+                        stop_server_btn = gr.Button("Stop Server", variant="stop")
+                        stop_server_output = gr.Textbox(
+                            label="Status", interactive=False, lines=3
+                        )
+
+                        stop_server_btn.click(
+                            stop_server,
+                            inputs=[session_state],
+                            outputs=[stop_server_output],
+                        )
 
             # Database Tab (visible only for admin/superuser)
             with gr.Tab("Database", visible=False) as database_tab:
@@ -829,32 +888,34 @@ def create_interface():
                     # Event handlers for Database tab
                     refresh_players_btn.click(
                         get_database_players,
+                        inputs=[session_state],
                         outputs=[players_display],
                     )
 
                     refresh_sessions_btn.click(
                         get_database_sessions,
+                        inputs=[session_state],
                         outputs=[sessions_display],
                     )
 
-                    def refresh_chat_with_limit(limit):
-                        return get_database_chat(limit)
+                    def refresh_chat_with_limit(limit, session_st):
+                        return get_database_chat(limit, session_st)
 
                     refresh_chat_btn.click(
                         refresh_chat_with_limit,
-                        inputs=[chat_limit_dropdown],
+                        inputs=[chat_limit_dropdown, session_state],
                         outputs=[chat_db_display],
                     )
 
-                    def execute_manage_user(target, action, new_role):
-                        result = manage_user(target, action, new_role)
+                    def execute_manage_user(target, action, new_role, session_st):
+                        result = manage_user(target, action, new_role, session_st)
                         # Also refresh players table after management action
-                        players = get_database_players()
+                        players = get_database_players(session_st)
                         return result, players, "", ""
 
                     manage_user_btn.click(
                         execute_manage_user,
-                        inputs=[target_username_input, action_dropdown, new_role_input],
+                        inputs=[target_username_input, action_dropdown, new_role_input, session_state],
                         outputs=[management_output, players_display, target_username_input, new_role_input],
                     )
 
@@ -896,8 +957,9 @@ Each zone contains items you can collect.
         # Wire up login event handler
         login_btn.click(
             login,
-            inputs=[login_username_input, login_password_input],
+            inputs=[login_username_input, login_password_input, session_state],
             outputs=[
+                session_state,
                 login_output,
                 login_username_input,
                 login_password_input,
@@ -912,13 +974,15 @@ Each zone contains items you can collect.
 
         # Wire up logout button to update tab visibility
         # This needs to be separate from the Game tab handler because tabs aren't defined yet there
-        def logout_and_hide_tabs():
-            result = logout()
-            return result[0], result[2], result[3], result[4], result[5], result[6], result[7]
+        def logout_and_hide_tabs(session_st):
+            result = logout(session_st)
+            return result[0], result[1], result[3], result[4], result[5], result[6], result[7], result[8]
 
         logout_btn.click(
             logout_and_hide_tabs,
+            inputs=[session_state],
             outputs=[
+                session_state,
                 login_output,
                 login_tab,
                 register_tab,

@@ -31,6 +31,7 @@ class Permission(Enum):
     KICK_USERS = "kick_users"
     BAN_USERS = "ban_users"
     VIEW_LOGS = "view_logs"
+    STOP_SERVER = "stop_server"
 
     # Superuser permissions
     MANAGE_USERS = "manage_users"
@@ -58,6 +59,7 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         Permission.BAN_USERS,
         Permission.VIEW_LOGS,
         Permission.EDIT_WORLD,
+        Permission.STOP_SERVER,
     },
     Role.SUPERUSER: {
         Permission.FULL_ACCESS,  # Superuser has all permissions

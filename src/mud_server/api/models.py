@@ -28,6 +28,10 @@ class UserManagementRequest(BaseModel):
     new_role: Optional[str] = None
 
 
+class ServerStopRequest(BaseModel):
+    session_id: str
+
+
 class CommandRequest(BaseModel):
     session_id: str
     command: str
@@ -78,5 +82,10 @@ class DatabaseChatResponse(BaseModel):
 
 
 class UserManagementResponse(BaseModel):
+    success: bool
+    message: str
+
+
+class ServerStopResponse(BaseModel):
     success: bool
     message: str
