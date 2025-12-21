@@ -4,7 +4,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+This repository contains **The Undertaking**, a procedural, ledger-driven multiplayer interactive fiction system. The current codebase is a **proof-of-concept MUD server** that validates the technical architecture while working toward the full design vision.
+
+### What is The Undertaking?
+
+**The Undertaking** is a procedural accountability system where:
+- **Characters are issued, not built** - Players receive complete, immutable goblins with uneven attributes, mandatory quirks, persistent failings, and inherited reputations
+- **Failure is recorded as data** - Actions are resolved through multiple axes (Timing, Precision, Stability, Visibility, Interpretability, Recovery Cost) and recorded in an immutable ledger
+- **Ledgers are truth, newspapers are stories** - Hard truth (deterministic ledger) is separated from soft truth (narrative interpretation)
+- **Optimization is resisted** - No "best builds" or meta-gaming; success comes from understanding your specific goblin's flaws
+- **Players become creators** - The journey from functionary → tinkerer → creator, eventually using the same tools as developers to build content
+
+See `docs/README.md` for complete design documentation.
+
+### Current Implementation Status
+
+The current codebase implements:
+- ✅ FastAPI backend with authentication and session management
+- ✅ Gradio web interface for client interaction
+- ✅ SQLite database for persistence
+- ✅ Basic room navigation and chat system
+- ✅ Role-based access control (Player/WorldBuilder/Admin/Superuser)
+- ✅ JSON-based world data structure
+
+The following features are designed but not yet implemented:
+- ⏳ Character issuance system with quirks, failings, and useless bits
+- ⏳ Axis-based action resolution engine
+- ⏳ Ledger and newspaper (hard truth vs. soft truth)
+- ⏳ Item quirks and frozen decision-making
+- ⏳ Environmental quirks and room properties
+- ⏳ Reputation system and blame attribution
+- ⏳ Creator's toolkit (Gradio authoring environment)
+
 This is a Python-based MUD (Multi-User Dungeon) server with a web-based client interface, organized using a modern Python src-layout structure.
+
+### Design Documentation
+
+Comprehensive design documentation is located in `docs/`:
+
+- **`docs/README.md`** - Overview and guide to all design documents
+- **`docs/the_undertaking_articulation.md`** - Core design articulation with five design pillars
+- **`docs/the_undertaking_platform_vision.md`** - Unified platform vision (Engine + Toolkit)
+- **`docs/undertaking_code_examples.md`** - Pseudo-code examples and database schema for full implementation
+- **`docs/undertaking_supplementary_examples.md`** - Additional implementation details, content libraries, API examples
+
+**Key Design Concepts:**
+- **Character Issuance** - Goblins issued with immutable attributes, quirks, failings, useless bits
+- **Axis-Based Resolution** - Six axes determine how actions fail (Timing, Precision, Stability, Visibility, Interpretability, Recovery Cost)
+- **Ledger Layer (Hard Truth)** - Deterministic, replayable, never calls LLMs
+- **Interpretation Layer (Soft Truth)** - Narrative generation, newspaper articles, context-dependent
+- **Items as Frozen Decisions** - Items carry maker's quirks and habits
+- **Creator's Toolkit** - Gradio authoring environment for player-created content
 
 ### Directory Structure
 ```
@@ -27,7 +77,12 @@ pipeworks_mud_server/
 ├── data/                  # Data files
 │   ├── world_data.json    # Room and item definitions
 │   └── mud.db             # SQLite database (generated)
-├── docs/                  # Documentation
+├── docs/                  # Design documentation for The Undertaking
+│   ├── README.md          # Documentation overview
+│   ├── the_undertaking_articulation.md
+│   ├── the_undertaking_platform_vision.md
+│   ├── undertaking_code_examples.md
+│   └── undertaking_supplementary_examples.md
 ├── logs/                  # Server and client logs
 └── tests/                 # Test files
 ```
@@ -141,6 +196,8 @@ export MUD_SERVER_URL="http://localhost:8000"
 
 ### Database Schema
 
+#### Current Implementation (Proof-of-Concept)
+
 **players table**
 - `id` - Auto-increment primary key
 - `username` (unique) - Player identifier
@@ -161,6 +218,28 @@ export MUD_SERVER_URL="http://localhost:8000"
 - `message` - Message content
 - `room` - Room where message was sent
 - `timestamp` - Message time
+
+#### Planned Implementation (Full Design)
+
+The full implementation will expand the database schema to include:
+
+**characters table** - Issued goblin characters with immutable attributes
+- Character identity (given_name, family_name, honorific)
+- Seven core attributes (cunning, grip_strength, patience, spatial_sense, stamina, book_learning, luck_administrative)
+- Quirk IDs (2-4 mandatory traits affecting resolution)
+- Failing IDs (persistent deficiencies)
+- Useless bit IDs (rarely helpful specializations)
+- Reputation score and notes
+
+**quirks table** - Mechanical traits with axis modifiers
+**failings table** - Persistent deficiencies that apply even on success
+**items table** - Items with quirks and maker profile (frozen decisions)
+**item_quirks table** - Item-specific mechanical properties
+**rooms table** - Locations with environmental quirks and difficulty
+**ledger table** - Immutable action records (hard truth)
+**newspaper table** - Narrative interpretations (soft truth)
+
+See `docs/undertaking_code_examples.md` for complete schema definitions with all fields and relationships.
 
 ### World Data Structure
 
@@ -219,6 +298,124 @@ World is defined in `data/world_data.json`:
 - Role-based access control (RBAC) with 4 user types
 - Session-based authentication with (username, role) tuples
 - Default superuser created on database initialization
+
+## The Undertaking: Planned Features
+
+The current proof-of-concept validates the technical architecture. The following systems are designed and documented but not yet implemented:
+
+### Character Issuance System
+
+Instead of character creation, players receive **issued goblins**:
+
+1. **Player chooses only sex** - everything else is procedurally generated
+2. **Immutable once sealed** - no respeccing, no optimization
+3. **Deliberately uneven** - some goblins are naturally better at certain things
+4. **Quirks** (2-4 mandatory) - mechanical traits affecting resolution (e.g., "Panics When Watched")
+5. **Failings** - persistent deficiencies that apply even on success (e.g., "Poor Numeracy")
+6. **Useless Bits** - specializations that sound helpful but rarely are (e.g., "Expert in Obsolete Measurement Systems")
+7. **Inherited Reputation** - bias before the player has done anything
+
+See `docs/the_undertaking_articulation.md` sections on Character Issuance.
+
+### Axis-Based Resolution Engine
+
+Actions resolve through six axes, not dice rolls:
+
+- **Timing** - When something happens in an action
+- **Precision** - How exact an action must be
+- **Stability** - How tolerant the system is to deviation
+- **Visibility** - How observable an error is
+- **Interpretability** - How outcomes are judged
+- **Recovery Cost** - Effort to correct or undo
+
+**How it works:**
+1. Character quirks and failings bias the axes before action starts
+2. Item quirks modify which axes matter most
+3. Environmental quirks (room properties) further modify axes
+4. Deterministic deviations calculated (seeded for replay)
+5. Outcome determined: success, partial success, or failure
+6. Contributing factors recorded in ledger
+
+Attributes don't add success—they change **how bad failure looks**. High cunning doesn't prevent failure; it lets you blame someone else.
+
+See `docs/undertaking_code_examples.md` Part 5 for resolution engine pseudo-code.
+
+### Ledger and Newspaper (Two-Layer Truth)
+
+**The Ledger (Hard Truth)**
+- Deterministic, replayable from seed
+- Never calls an LLM
+- Records facts: what happened, which attributes were consulted, which quirks triggered
+- Source of authority for all game logic
+- Immutable once written
+
+**The Newspaper (Soft Truth)**
+- Consumes ledger facts and produces language
+- May vary per context and contradict itself narratively
+- Influenced by reputation, luck, and name
+- Can be regenerated without affecting game state
+- Provides narrative interpretation of failure
+
+Example:
+- **Ledger**: "Action: fishing. Outcome: failure. Contributing factors: [failing_patience_low, item_quirk_delayed_feedback]. Interpretation: avoidable. Blame weight: 0.8"
+- **Newspaper**: "Third time this week a catch slipped from Grindlewick's pole. Locals blame impatience. Experts disagree."
+
+### Items as Frozen Decisions
+
+Items carry the maker's habits, shortcuts, grudges, and mistakes:
+
+- **Maker Profile** - Item stores creator's attributes and quirks
+- **Item Quirks** - Mechanical properties that interact with character quirks
+- **Context-Dependent** - Same item fails differently for different goblins
+- **No "Best" Items** - A pole with "Delayed Feedback" helps patient goblins but hurts impatient ones
+
+A fishing pole made by a goblin with low patience might have a loose reel (made in a hurry) and delayed feedback (attempt to compensate). When you use that pole, you're using their solutions to their problems.
+
+### Creator's Toolkit
+
+The Gradio interface will expand into a player-facing authoring environment:
+
+- **Quirk Studio** - Design new quirks and test mechanical effects
+- **Item Forge** - Create items with unique properties and histories
+- **Room Builder** - Design new rooms and link them to the world
+- **NPC Scripter** - Write dialogue and behavior for custom NPCs
+- **Newspaper Editor** - Write and publish interpretations of world events
+
+Players progress: Functionary (survive) → Tinkerer (understand) → Creator (build)
+
+### Implementation Roadmap
+
+The proof-of-concept establishes the foundation. Planned implementation phases:
+
+**Phase 1: Character Issuance** (extends current player system)
+- Character generator with quirks, failings, useless bits
+- Attribute distribution system
+- Immutable character sealing
+
+**Phase 2: Resolution Engine** (replaces simple command parsing)
+- Axis-based resolution system
+- Quirk and failing modifiers
+- Deterministic outcome calculation
+
+**Phase 3: Ledger System** (extends database)
+- Ledger table for action records
+- Contributing factors tracking
+- Blame weight calculation
+
+**Phase 4: Interpretation Layer** (adds narrative)
+- Newspaper generation
+- Reputation system
+- Narrative tone based on character history
+
+**Phase 5: Items and Rooms** (extends world system)
+- Item quirks and maker profiles
+- Environmental quirks for rooms
+- Player-created content support
+
+**Phase 6: Creator's Toolkit** (extends Gradio UI)
+- Content authoring interfaces
+- Player-facing scripting tools
+- Content sharing and publication
 
 ## Authentication & Security
 
@@ -404,3 +601,114 @@ Sessions track both username and role:
 **data/mud.db**
 - SQLite database (generated at runtime)
 - Stores players, sessions, chat messages
+
+## Development Guidelines for The Undertaking
+
+When implementing features from the design vision, follow these principles:
+
+### Programmatic vs. LLM Responsibilities
+
+**Programmatic systems are AUTHORITATIVE for:**
+- Character names (structure, uniqueness, cadence)
+- Attributes and their distributions
+- Quirks, failings, useless bits (IDs, triggers, mechanical effects)
+- Items, item quirks, provenance
+- Resolution math and axis calculations
+- Ledger truth and contributing factors
+- All game logic and state
+
+**LLMs are NON-AUTHORITATIVE and used ONLY for:**
+- Descriptions and flavor text
+- Explanations and help text
+- Tone and voice
+- In-world paperwork language
+- Newspaper copy and narrative interpretation
+- NPC dialogue gloss
+- "Tell the truth without lying" summaries
+
+This separation prevents hallucinated mechanics, balance drift, and schema corruption.
+
+### Key Implementation Principles
+
+1. **Determinism First** - All game logic must be deterministic and replayable from seed
+2. **Ledger is Truth** - The ledger is the source of authority; everything else is interpretation
+3. **No Silent Failures** - All quirks, failings, and modifiers must be explicitly tracked
+4. **Context Matters** - Same action fails differently based on character + item + room combination
+5. **Resistance to Optimization** - Design choices should resist meta-gaming and optimization
+6. **Gradual Disclosure** - Some quirks are hidden; players discover them through failure
+7. **Blame Attribution** - Always track who/what is responsible for outcomes
+
+### Database Migration Strategy
+
+When implementing new tables (characters, quirks, items, ledger, newspaper):
+- Keep existing `players` table for authentication and sessions
+- Add `characters` table separately for goblin profiles
+- Link characters to players via `account_id` field
+- This allows multiple characters per account in the future
+- Preserve backward compatibility during migration
+
+### Testing Requirements
+
+When implementing axis-based resolution:
+- **Test determinism** - Same seed must produce same outcome
+- **Test axis interactions** - Verify quirk stacking and cancellation
+- **Test edge cases** - Zero attributes, maximum modifiers, conflicting quirks
+- **Test replay** - Ledger entries must be replayable exactly
+- **Test narrative variation** - Same ledger entry can produce different newspaper text
+
+### Content Library Structure
+
+Store quirks, failings, useless bits, and item quirks as JSON files in `data/`:
+- `data/quirks.json` - Character quirks library
+- `data/failings.json` - Failings library
+- `data/useless_bits.json` - Useless specializations
+- `data/item_quirks.json` - Item quirk library
+- `data/environmental_quirks.json` - Room quirks
+
+See `docs/undertaking_supplementary_examples.md` Part 1-3 for complete content library structures.
+
+### Gradio UI Evolution
+
+The Gradio interface should evolve in phases:
+1. **Current**: Simple tabs for login, game, help
+2. **Phase 1**: Add character issuance interface (limited choices)
+3. **Phase 2**: Add action resolution feedback (show axis deviations)
+4. **Phase 3**: Add newspaper view (narrative interpretation)
+5. **Phase 4**: Add content authoring tabs (Creator's Toolkit)
+6. **Phase 5**: Add content sharing and publication
+
+Each phase should maintain backward compatibility with existing functionality.
+
+### API Evolution
+
+When extending the API for new features:
+- Add new endpoints; don't break existing ones
+- Version API routes if breaking changes are necessary (`/v2/...`)
+- Maintain current `/command` endpoint for basic navigation during transition
+- Add specialized endpoints for complex actions (e.g., `/actions/resolve`)
+- Return both ledger data and narrative interpretation in responses
+
+### Code Organization for New Systems
+
+Suggested file organization for planned features:
+
+```
+src/mud_server/
+├── core/
+│   ├── character/
+│   │   ├── issuer.py          # Character issuance system
+│   │   ├── attributes.py      # Attribute generation
+│   │   └── quirks.py          # Quirk application logic
+│   ├── resolution/
+│   │   ├── engine.py          # Axis-based resolution
+│   │   ├── axes.py            # Axis definitions and math
+│   │   └── modifiers.py       # Modifier application
+│   ├── ledger/
+│   │   ├── recorder.py        # Ledger writing
+│   │   └── replay.py          # Deterministic replay
+│   └── interpretation/
+│       ├── newspaper.py       # Narrative generation
+│       └── reputation.py      # Reputation tracking
+```
+
+This keeps new systems modular while preserving existing `engine.py` and `world.py` during transition.
