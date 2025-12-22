@@ -3,11 +3,49 @@ Register Tab for MUD Client.
 
 This module provides the registration interface for creating new user accounts.
 Visible only when not logged in.
+
+Migration Notes:
+    - Migrated from old api_client.py to new modular structure
+    - Uses AuthAPIClient for registration API calls
+    - Extracts message from API response dict for Gradio display
 """
 
 import gradio as gr
 
-from mud_server.client.api_client import register
+from mud_server.client.api.auth import AuthAPIClient
+
+# Create module-level API client instance for reuse
+_auth_client = AuthAPIClient()
+
+
+def register(username: str, password: str, password_confirm: str) -> str:
+    """
+    Handle new user account registration.
+
+    Validates input, sends registration request to backend API via AuthAPIClient,
+    and returns status message indicating success or failure.
+
+    This function wraps the new AuthAPIClient.register() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        username: Desired username for new account
+        password: Plain text password for new account
+        password_confirm: Password confirmation (must match password)
+
+    Returns:
+        String message indicating registration success or failure
+
+    Examples:
+        >>> result = register("alice", "password123", "password123")
+        >>> "You can now login" in result
+        True
+    """
+    # Call the new API client
+    api_result = _auth_client.register(username, password, password_confirm)
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
 
 
 def create():

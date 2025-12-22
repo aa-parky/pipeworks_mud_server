@@ -4,11 +4,197 @@ Game Tab for MUD Client.
 This module provides the main gameplay interface with room view, chat,
 status panel, movement controls, and auto-refresh functionality.
 Visible only when logged in.
+
+Migration Notes:
+    - Migrated from old api_client.py to new modular structure
+    - Uses GameAPIClient for game operations (send_command, get_chat, get_status, refresh_display)
+    - Uses AuthAPIClient for logout
+    - Wrapper functions extract session_id, username, and role from session_state
+    - refresh_display returns dict with {"room": str, "chat": str} instead of tuple
+    - All other functions return strings for Gradio display
 """
 
 import gradio as gr
 
-from mud_server.client.api_client import get_status, logout, refresh_display, send_command
+from mud_server.client.api.auth import AuthAPIClient
+from mud_server.client.api.game import GameAPIClient
+
+# Create module-level API client instances for reuse
+_game_client = GameAPIClient()
+_auth_client = AuthAPIClient()
+
+
+def send_command(command: str, session_state: dict) -> str:
+    """
+    Send a game command to the backend for execution.
+
+    Sends request to backend via GameAPIClient and returns command result.
+
+    This function wraps the new GameAPIClient.send_command() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        command: Command string to execute
+        session_state: User's session state dictionary containing session_id
+
+    Returns:
+        Command result string or error message
+
+    Examples:
+        >>> session = {"session_id": "abc123", "logged_in": True}
+        >>> result = send_command("look", session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id from session state
+    session_id = session_state.get("session_id")
+
+    # Call the new API client
+    api_result = _game_client.send_command(
+        command=command,
+        session_id=session_id,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
+
+
+def refresh_display(session_state: dict) -> tuple[str, str]:
+    """
+    Refresh both room and chat displays by fetching current data.
+
+    Sends request to backend via GameAPIClient and returns room and chat data.
+
+    This function wraps the new GameAPIClient.refresh_display() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        session_state: User's session state dictionary containing session_id
+
+    Returns:
+        Tuple of (room_description, chat_messages) both as strings
+
+    Examples:
+        >>> session = {"session_id": "abc123", "logged_in": True}
+        >>> room, chat = refresh_display(session)
+        >>> isinstance(room, str) and isinstance(chat, str)
+        True
+    """
+    # Extract session_id from session state
+    session_id = session_state.get("session_id")
+
+    # Call the new API client
+    api_result = _game_client.refresh_display(session_id=session_id)
+
+    # Extract room and chat from data dict and return as tuple
+    # New API returns dict with data["room"] and data["chat"]
+    if api_result["success"] and api_result["data"]:
+        room = api_result["data"]["room"]
+        chat = api_result["data"]["chat"]
+        return room, chat
+    else:
+        # Return error message if failed
+        error_msg = api_result.get("message", "Failed to refresh display")
+        return error_msg, ""
+
+
+def get_status(session_state: dict) -> str:
+    """
+    Retrieve and format player status information.
+
+    Sends request to backend via GameAPIClient and returns formatted status.
+
+    This function wraps the new GameAPIClient.get_status() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        session_state: User's session state dictionary containing session_id, username, role
+
+    Returns:
+        Formatted status string
+
+    Examples:
+        >>> session = {"session_id": "abc123", "username": "alice", "role": "player", "logged_in": True}
+        >>> result = get_status(session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id, username, and role from session state
+    session_id = session_state.get("session_id")
+    username = session_state.get("username", "Unknown")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    api_result = _game_client.get_status(
+        session_id=session_id,
+        username=username,
+        role=role,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
+
+
+def logout(session_state: dict) -> tuple:
+    """
+    Handle user logout and return result tuple for Gradio.
+
+    Sends logout request to backend via AuthAPIClient and returns result tuple
+    matching the expected format from old api_client.
+
+    This function wraps the new AuthAPIClient.logout() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Note: This function is called from game_tab but the full logout flow with
+    tab visibility updates is handled in app.py's logout_and_hide_tabs() function.
+
+    Args:
+        session_state: User's session state dictionary containing session_id
+
+    Returns:
+        Tuple matching old API format for compatibility with app.py logout handler
+        Format: (session_state, message, blank, ...)
+        The app.py handler extracts result[1] for the message
+
+    Examples:
+        >>> session = {"session_id": "abc123", "logged_in": True}
+        >>> result = logout(session)
+        >>> isinstance(result, tuple) and len(result) >= 2
+        True
+    """
+    # Extract session_id from session state
+    session_id = session_state.get("session_id")
+
+    # Call the new API client
+    api_result = _auth_client.logout(session_id=session_id)
+
+    # Clear session state (mimicking old behavior)
+    session_state["session_id"] = None
+    session_state["username"] = None
+    session_state["role"] = None
+    session_state["logged_in"] = False
+
+    # Return tuple matching old format for compatibility
+    # app.py's logout_and_hide_tabs() extracts result[1] (message)
+    # and result[3:] for tab visibility updates
+    # We return a simple tuple with session_state and message
+    # The full tuple building is done in app.py using build_logged_out_state
+    message = api_result["message"]
+
+    # Return tuple in format expected by app.py: (session_state, message, blank, tabs...)
+    # The tabs part is filled in by app.py's logout_and_hide_tabs function
+    return (
+        session_state,  # [0]
+        message,        # [1]
+        "",            # [2] blank field
+        gr.update(visible=True),   # [3] login tab
+        gr.update(visible=True),   # [4] register tab
+        gr.update(visible=False),  # [5] game tab
+        gr.update(visible=False),  # [6] settings tab
+        gr.update(visible=False),  # [7] database tab
+        gr.update(visible=False),  # [8] ollama tab
+        gr.update(visible=False),  # [9] help tab
+    )
 
 
 def create(session_state):

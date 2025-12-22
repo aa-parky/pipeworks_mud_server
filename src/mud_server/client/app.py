@@ -40,7 +40,7 @@ API Communication:
 
 import gradio as gr
 
-from mud_server.client.api_client import login, logout
+from mud_server.client.api.auth import AuthAPIClient
 from mud_server.client.tabs import (
     database_tab,
     game_tab,
@@ -50,7 +50,131 @@ from mud_server.client.tabs import (
     register_tab,
     settings_tab,
 )
+from mud_server.client.ui.state import (
+    build_logged_in_state,
+    build_login_failed_state,
+    clear_session_state,
+    is_admin_role,
+    update_session_state,
+)
 from mud_server.client.utils import create_session_state, load_css
+
+# Create module-level API client instance for reuse
+_auth_client = AuthAPIClient()
+
+
+def login(username: str, password: str, session_state: dict) -> tuple:
+    """
+    Handle user login with password authentication.
+
+    Sends credentials to backend via AuthAPIClient, stores session data on success,
+    and returns updated UI state for tab visibility and user info display.
+
+    This function wraps the new AuthAPIClient.login() method and uses UI state
+    builders to maintain compatibility with the Gradio interface.
+
+    Migration Notes:
+        - Migrated from old api_client.py to new modular structure
+        - Uses AuthAPIClient for authentication
+        - Uses state builders (build_logged_in_state, build_login_failed_state)
+        - Updates session_state using update_session_state helper
+        - Returns tuple matching Gradio output expectations
+
+    Args:
+        username: Username to login with
+        password: Plain text password
+        session_state: User's session state dictionary
+
+    Returns:
+        Tuple of (session_state, login_result, clear_username, clear_password,
+                  login_tab, register_tab, game_tab, settings_tab, db_tab, ollama_tab, help_tab)
+
+    Examples:
+        >>> session = {}
+        >>> result = login("alice", "password123", session)
+        >>> isinstance(result, tuple) and len(result) == 11
+        True
+    """
+    # Call the new API client
+    api_result = _auth_client.login(username, password)
+
+    # Build UI state based on result
+    if api_result["success"]:
+        # Update session state with login data
+        session_state = update_session_state(
+            session_state,
+            session_id=api_result["data"]["session_id"],
+            username=api_result["data"]["username"],
+            role=api_result["data"]["role"],
+        )
+
+        # Check if user has admin access
+        has_admin_access = is_admin_role(api_result["data"]["role"])
+
+        # Build and return logged-in UI state
+        return build_logged_in_state(
+            session_state,
+            message=api_result["message"],
+            has_admin_access=has_admin_access,
+        )
+    else:
+        # Build and return login-failed UI state
+        return build_login_failed_state(session_state, api_result["message"])
+
+
+def logout(session_state: dict) -> tuple:
+    """
+    Handle user logout and clean up session state.
+
+    Sends logout request to backend via AuthAPIClient, clears session data,
+    and returns updated UI state to hide game tabs and show login tabs.
+
+    This function wraps the new AuthAPIClient.logout() method and uses UI state
+    builders to maintain compatibility with the Gradio interface.
+
+    Migration Notes:
+        - Migrated from old api_client.py to new modular structure
+        - Uses AuthAPIClient for logout
+        - Uses clear_session_state helper to reset session
+        - Uses build_logged_out_state (via manual construction) for UI updates
+        - Returns tuple matching Gradio output expectations
+
+    Args:
+        session_state: User's session state dictionary
+
+    Returns:
+        Tuple of (session_state, message, blank, login_tab, register_tab,
+                  game_tab, settings_tab, db_tab, ollama_tab, help_tab)
+
+    Examples:
+        >>> session = {"session_id": "abc123", "logged_in": True}
+        >>> result = logout(session)
+        >>> isinstance(result, tuple) and len(result) == 10
+        True
+    """
+    # Extract session_id from session state
+    session_id = session_state.get("session_id")
+
+    # Call the new API client
+    api_result = _auth_client.logout(session_id=session_id)
+
+    # Clear session state
+    session_state = clear_session_state(session_state)
+
+    # Build and return logged-out UI state
+    # Format: (session_state, message, blank, tabs...)
+    return (
+        session_state,
+        api_result["message"],
+        "",  # blank field
+        gr.update(visible=True),   # login tab
+        gr.update(visible=True),   # register tab
+        gr.update(visible=False),  # game tab
+        gr.update(visible=False),  # settings tab
+        gr.update(visible=False),  # database tab
+        gr.update(visible=False),  # ollama tab
+        gr.update(visible=False),  # help tab
+    )
 
 
 def create_interface():

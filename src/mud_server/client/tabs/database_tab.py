@@ -3,16 +3,182 @@ Database Tab for MUD Client.
 
 This module provides the database viewer and user management interface.
 Visible only for admin and superuser roles.
+
+Migration Notes:
+    - Migrated from old api_client.py to new modular structure
+    - Uses AdminAPIClient for all database operations
+    - Wrapper functions extract session_id and role from session_state
+    - Returns message string for Gradio display
+    - Parameter order changed: session_id and role now come first
 """
 
 import gradio as gr
 
-from mud_server.client.api_client import (
-    get_database_chat,
-    get_database_players,
-    get_database_sessions,
-    manage_user,
-)
+from mud_server.client.api.admin import AdminAPIClient
+
+# Create module-level API client instance for reuse
+_admin_client = AdminAPIClient()
+
+
+def get_database_players(session_state: dict) -> str:
+    """
+    Fetch and format all players from database (Admin/Superuser only).
+
+    Sends request to backend via AdminAPIClient and returns formatted player table.
+
+    This function wraps the new AdminAPIClient.get_database_players() method to
+    maintain compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        session_state: User's session state dictionary containing session_id and role
+
+    Returns:
+        Formatted multi-line string with player database contents
+
+    Examples:
+        >>> session = {"session_id": "admin123", "role": "admin", "logged_in": True}
+        >>> result = get_database_players(session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id and role from session state
+    session_id = session_state.get("session_id")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    api_result = _admin_client.get_database_players(
+        session_id=session_id,
+        role=role,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
+
+
+def get_database_sessions(session_state: dict) -> str:
+    """
+    Fetch and format all active sessions from database (Admin/Superuser only).
+
+    Sends request to backend via AdminAPIClient and returns formatted sessions table.
+
+    This function wraps the new AdminAPIClient.get_database_sessions() method to
+    maintain compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        session_state: User's session state dictionary containing session_id and role
+
+    Returns:
+        Formatted multi-line string with sessions database contents
+
+    Examples:
+        >>> session = {"session_id": "admin123", "role": "admin", "logged_in": True}
+        >>> result = get_database_sessions(session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id and role from session state
+    session_id = session_state.get("session_id")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    api_result = _admin_client.get_database_sessions(
+        session_id=session_id,
+        role=role,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
+
+
+def get_database_chat(limit: int, session_state: dict) -> str:
+    """
+    Fetch and format recent chat messages from database (Admin/Superuser only).
+
+    Sends request to backend via AdminAPIClient and returns formatted chat history.
+
+    This function wraps the new AdminAPIClient.get_database_chat() method to
+    maintain compatibility with the Gradio interface while using the new modular API.
+
+    Note: Parameter order is maintained from old API (limit, session_state) for
+    compatibility with existing Gradio event handlers.
+
+    Args:
+        limit: Maximum number of messages to retrieve
+        session_state: User's session state dictionary containing session_id and role
+
+    Returns:
+        Formatted multi-line string with recent chat messages
+
+    Examples:
+        >>> session = {"session_id": "admin123", "role": "admin", "logged_in": True}
+        >>> result = get_database_chat(100, session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id and role from session state
+    session_id = session_state.get("session_id")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    # Note: New API has different parameter order (session_id, role, limit)
+    api_result = _admin_client.get_database_chat(
+        session_id=session_id,
+        role=role,
+        limit=limit,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
+
+
+def manage_user(target_username: str, action: str, new_role: str, session_state: dict) -> str:
+    """
+    Perform user management actions (Admin/Superuser only).
+
+    Supported actions:
+    - change_role: Change user's role (requires new_role parameter)
+    - ban: Ban/deactivate user account
+    - unban: Unban/reactivate user account
+
+    Sends request to backend via AdminAPIClient and returns result message.
+
+    This function wraps the new AdminAPIClient.manage_user() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Note: Parameter order is maintained from old API for compatibility with
+    existing Gradio event handlers.
+
+    Args:
+        target_username: Username of user to manage
+        action: Action to perform (change_role, ban, unban)
+        new_role: New role for change_role action (empty string if not applicable)
+        session_state: User's session state dictionary containing session_id and role
+
+    Returns:
+        Status message string indicating success or failure
+
+    Examples:
+        >>> session = {"session_id": "admin123", "role": "admin", "logged_in": True}
+        >>> result = manage_user("alice", "change_role", "worldbuilder", session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id and role from session state
+    session_id = session_state.get("session_id")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    # Note: New API has different parameter order (session_id, role, target, action, new_role)
+    api_result = _admin_client.manage_user(
+        session_id=session_id,
+        role=role,
+        target_username=target_username,
+        action=action,
+        new_role=new_role,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
 
 
 def create(session_state):

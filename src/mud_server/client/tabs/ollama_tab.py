@@ -3,11 +3,99 @@ Ollama Tab for MUD Client.
 
 This module provides the Ollama management interface for controlling AI models.
 Visible only for admin and superuser roles.
+
+Migration Notes:
+    - Migrated from old api_client.py to new modular structure
+    - Uses OllamaAPIClient for Ollama command execution and context management
+    - Wrapper functions extract session_id and role from session_state
+    - Returns message string for Gradio display
+    - Parameter order changed: session_id and role now come first
 """
 
 import gradio as gr
 
-from mud_server.client.api_client import execute_ollama_command
+from mud_server.client.api.ollama import OllamaAPIClient
+
+# Create module-level API client instance for reuse
+_ollama_client = OllamaAPIClient()
+
+
+def execute_ollama_command(server_url: str, command: str, session_state: dict) -> str:
+    """
+    Execute an Ollama command on the specified server (Admin/Superuser only).
+
+    Sends request to backend via OllamaAPIClient and returns command output.
+
+    This function wraps the new OllamaAPIClient.execute_command() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Note: Parameter order is maintained from old API (server_url, command, session_state)
+    for compatibility with existing Gradio event handlers.
+
+    Args:
+        server_url: URL of the Ollama server
+        command: Ollama command to execute
+        session_state: User's session state dictionary containing session_id and role
+
+    Returns:
+        Command output string or error message
+
+    Examples:
+        >>> session = {"session_id": "admin123", "role": "admin", "logged_in": True}
+        >>> result = execute_ollama_command("http://localhost:11434", "list", session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id and role from session state
+    session_id = session_state.get("session_id")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    # Note: New API has different parameter order (session_id, role, server_url, command)
+    api_result = _ollama_client.execute_command(
+        session_id=session_id,
+        role=role,
+        server_url=server_url,
+        command=command,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
+
+
+def clear_ollama_context(session_state: dict) -> str:
+    """
+    Clear Ollama conversation context for the current session (Admin/Superuser only).
+
+    Sends request to backend via OllamaAPIClient and returns confirmation message.
+
+    This function wraps the new OllamaAPIClient.clear_context() method to maintain
+    compatibility with the Gradio interface while using the new modular API.
+
+    Args:
+        session_state: User's session state dictionary containing session_id and role
+
+    Returns:
+        Confirmation message string or error message
+
+    Examples:
+        >>> session = {"session_id": "admin123", "role": "admin", "logged_in": True}
+        >>> result = clear_ollama_context(session)
+        >>> isinstance(result, str)
+        True
+    """
+    # Extract session_id and role from session state
+    session_id = session_state.get("session_id")
+    role = session_state.get("role", "player")
+
+    # Call the new API client
+    api_result = _ollama_client.clear_context(
+        session_id=session_id,
+        role=role,
+    )
+
+    # Extract and return the message string for Gradio display
+    return api_result["message"]
 
 
 def create(session_state):
@@ -135,8 +223,7 @@ The system will remember your active model until you start a new `/run` command.
                 Returns:
                     Tuple of (output_message, cleared_model)
                 """
-                from mud_server.client.api_client import clear_ollama_context
-
+                # Call the module-level wrapper function (no import needed)
                 result = clear_ollama_context(session_st)
                 return result, None  # Also clear the active model
 
