@@ -56,7 +56,7 @@ def send_command(command: str, session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def refresh_display(session_state: dict) -> tuple[str, str]:
@@ -132,7 +132,7 @@ def get_status(session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def logout(session_state: dict) -> tuple:
@@ -185,10 +185,10 @@ def logout(session_state: dict) -> tuple:
     # The tabs part is filled in by app.py's logout_and_hide_tabs function
     return (
         session_state,  # [0]
-        message,        # [1]
-        "",            # [2] blank field
-        gr.update(visible=True),   # [3] login tab
-        gr.update(visible=True),   # [4] register tab
+        message,  # [1]
+        "",  # [2] blank field
+        gr.update(visible=True),  # [3] login tab
+        gr.update(visible=True),  # [4] register tab
         gr.update(visible=False),  # [5] game tab
         gr.update(visible=False),  # [6] settings tab
         gr.update(visible=False),  # [7] database tab

@@ -45,7 +45,7 @@ def register(username: str, password: str, password_confirm: str) -> str:
     api_result = _auth_client.register(username, password, password_confirm)
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def create():

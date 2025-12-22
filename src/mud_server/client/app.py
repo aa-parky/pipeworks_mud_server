@@ -167,8 +167,8 @@ def logout(session_state: dict) -> tuple:
         session_state,
         api_result["message"],
         "",  # blank field
-        gr.update(visible=True),   # login tab
-        gr.update(visible=True),   # register tab
+        gr.update(visible=True),  # login tab
+        gr.update(visible=True),  # register tab
         gr.update(visible=False),  # game tab
         gr.update(visible=False),  # settings tab
         gr.update(visible=False),  # database tab

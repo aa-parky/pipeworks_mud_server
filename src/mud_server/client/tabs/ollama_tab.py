@@ -60,7 +60,7 @@ def execute_ollama_command(server_url: str, command: str, session_state: dict) -
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def clear_ollama_context(session_state: dict) -> str:
@@ -95,7 +95,7 @@ def clear_ollama_context(session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def create(session_state):

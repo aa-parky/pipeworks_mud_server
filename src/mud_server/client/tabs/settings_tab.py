@@ -58,7 +58,7 @@ def change_password(
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def stop_server(session_state: dict) -> str:
@@ -93,7 +93,7 @@ def stop_server(session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def create(session_state):

@@ -52,7 +52,7 @@ def get_database_players(session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def get_database_sessions(session_state: dict) -> str:
@@ -87,7 +87,7 @@ def get_database_sessions(session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def get_database_chat(limit: int, session_state: dict) -> str:
@@ -128,7 +128,7 @@ def get_database_chat(limit: int, session_state: dict) -> str:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def manage_user(target_username: str, action: str, new_role: str, session_state: dict) -> str:
@@ -178,7 +178,7 @@ def manage_user(target_username: str, action: str, new_role: str, session_state:
     )
 
     # Extract and return the message string for Gradio display
-    return api_result["message"]
+    return str(api_result["message"])
 
 
 def create(session_state):
