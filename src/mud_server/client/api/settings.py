@@ -21,7 +21,6 @@ Response Format:
     }
 """
 
-from typing import Optional
 
 from mud_server.client.api.base import BaseAPIClient
 from mud_server.client.ui.validators import (
@@ -54,7 +53,7 @@ class SettingsAPIClient(BaseAPIClient):
 
     def change_password(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         old_password: str,
         new_password: str,
         confirm_password: str,
@@ -117,7 +116,7 @@ class SettingsAPIClient(BaseAPIClient):
         if not is_valid:
             return {
                 "success": False,
-                "message": f"New password must be at least 8 characters.",
+                "message": "New password must be at least 8 characters.",
                 "data": None,
                 "error": error,
             }
@@ -170,7 +169,7 @@ class SettingsAPIClient(BaseAPIClient):
 
     def stop_server(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
     ) -> dict:
         """

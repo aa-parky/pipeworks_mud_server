@@ -13,7 +13,7 @@ Configuration:
 """
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -32,7 +32,7 @@ class BaseAPIClient:
         server_url: Backend API server URL
     """
 
-    def __init__(self, server_url: Optional[str] = None):
+    def __init__(self, server_url: str | None = None):
         """
         Initialize the base API client.
 
@@ -47,8 +47,8 @@ class BaseAPIClient:
         self,
         method: str,
         endpoint: str,
-        json: Optional[dict] = None,
-        params: Optional[dict] = None,
+        json: dict | None = None,
+        params: dict | None = None,
         timeout: int = 30,
     ) -> dict[str, Any]:
         """
@@ -139,7 +139,7 @@ class BaseAPIClient:
     def get(
         self,
         endpoint: str,
-        params: Optional[dict] = None,
+        params: dict | None = None,
         timeout: int = 30,
     ) -> dict[str, Any]:
         """
@@ -158,7 +158,7 @@ class BaseAPIClient:
     def post(
         self,
         endpoint: str,
-        json: Optional[dict] = None,
+        json: dict | None = None,
         timeout: int = 30,
     ) -> dict[str, Any]:
         """

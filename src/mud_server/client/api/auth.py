@@ -21,7 +21,6 @@ Response Format:
     }
 """
 
-from typing import Optional
 
 from mud_server.client.api.base import BaseAPIClient
 from mud_server.client.ui.validators import (
@@ -217,7 +216,7 @@ class AuthAPIClient(BaseAPIClient):
                 "error": response["error"],
             }
 
-    def logout(self, session_id: Optional[str]) -> dict:
+    def logout(self, session_id: str | None) -> dict:
         """
         Logout user and clean up session.
 

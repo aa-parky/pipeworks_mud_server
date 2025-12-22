@@ -11,8 +11,6 @@ This module tests the OllamaAPIClient class, verifying:
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from mud_server.client.api.ollama import OllamaAPIClient
 
 

@@ -23,7 +23,6 @@ Response Format:
     }
 """
 
-from typing import Optional
 
 from mud_server.client.api.base import BaseAPIClient
 from mud_server.client.ui.validators import validate_command_input, validate_session_state
@@ -43,7 +42,7 @@ class GameAPIClient(BaseAPIClient):
         ...     print(result["message"])
     """
 
-    def send_command(self, command: str, session_id: Optional[str]) -> dict:
+    def send_command(self, command: str, session_id: str | None) -> dict:
         """
         Send a game command to the backend for execution.
 
@@ -127,7 +126,7 @@ class GameAPIClient(BaseAPIClient):
                 "error": response["error"],
             }
 
-    def get_chat(self, session_id: Optional[str]) -> dict:
+    def get_chat(self, session_id: str | None) -> dict:
         """
         Retrieve recent chat messages from the current room.
 
@@ -180,7 +179,7 @@ class GameAPIClient(BaseAPIClient):
                 "error": response["error"],
             }
 
-    def get_status(self, session_id: Optional[str], username: str, role: str) -> dict:
+    def get_status(self, session_id: str | None, username: str, role: str) -> dict:
         """
         Retrieve and format player status information.
 
@@ -254,7 +253,7 @@ Active Players: {active_players}
                 "error": response["error"],
             }
 
-    def refresh_display(self, session_id: Optional[str]) -> dict:
+    def refresh_display(self, session_id: str | None) -> dict:
         """
         Refresh both room and chat displays by fetching current data.
 

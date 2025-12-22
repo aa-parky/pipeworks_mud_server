@@ -21,7 +21,6 @@ Response Format:
     }
 """
 
-from typing import Optional
 
 from mud_server.client.api.base import BaseAPIClient
 from mud_server.client.ui.validators import (
@@ -52,7 +51,7 @@ class OllamaAPIClient(BaseAPIClient):
 
     def execute_command(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
         server_url: str,
         command: str,
@@ -185,7 +184,7 @@ class OllamaAPIClient(BaseAPIClient):
 
     def clear_context(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
     ) -> dict:
         """

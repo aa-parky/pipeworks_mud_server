@@ -7,7 +7,6 @@ This module tests all validation functions to ensure:
 - Edge cases are handled correctly
 """
 
-import pytest
 
 from mud_server.client.ui.validators import (
     validate_admin_role,

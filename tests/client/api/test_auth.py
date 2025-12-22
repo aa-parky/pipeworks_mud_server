@@ -10,8 +10,6 @@ This module tests the AuthAPIClient class, verifying:
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from mud_server.client.api.auth import AuthAPIClient
 
 
@@ -123,7 +121,7 @@ class TestAuthAPIClientLogin:
             }
             mock_request.return_value = mock_response
 
-            result = client.login("  alice  ", "password123")
+            client.login("  alice  ", "password123")
 
             # Verify username was stripped
             call_kwargs = mock_request.call_args.kwargs
@@ -259,7 +257,7 @@ class TestAuthAPIClientRegister:
             mock_response.json.return_value = {"message": "Success"}
             mock_request.return_value = mock_response
 
-            result = client.register("  alice  ", "password123", "password123")
+            client.register("  alice  ", "password123", "password123")
 
             # Verify username was stripped
             call_kwargs = mock_request.call_args.kwargs

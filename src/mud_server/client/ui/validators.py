@@ -16,10 +16,9 @@ Common Patterns:
     - (False, "Error message") for invalid input
 """
 
-from typing import Optional
 
 
-def validate_username(username: Optional[str]) -> tuple[bool, str]:
+def validate_username(username: str | None) -> tuple[bool, str]:
     """
     Validate username meets requirements.
 
@@ -50,7 +49,7 @@ def validate_username(username: Optional[str]) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_password(password: Optional[str], min_length: int = 8) -> tuple[bool, str]:
+def validate_password(password: str | None, min_length: int = 8) -> tuple[bool, str]:
     """
     Validate password meets requirements.
 
@@ -83,8 +82,8 @@ def validate_password(password: Optional[str], min_length: int = 8) -> tuple[boo
 
 
 def validate_password_confirmation(
-    password: Optional[str],
-    password_confirm: Optional[str],
+    password: str | None,
+    password_confirm: str | None,
 ) -> tuple[bool, str]:
     """
     Validate that password and confirmation match.
@@ -111,8 +110,8 @@ def validate_password_confirmation(
 
 
 def validate_password_different(
-    old_password: Optional[str],
-    new_password: Optional[str],
+    old_password: str | None,
+    new_password: str | None,
 ) -> tuple[bool, str]:
     """
     Validate that new password is different from old password.
@@ -135,7 +134,7 @@ def validate_password_different(
     return True, ""
 
 
-def validate_required_field(value: Optional[str], field_name: str) -> tuple[bool, str]:
+def validate_required_field(value: str | None, field_name: str) -> tuple[bool, str]:
     """
     Validate that a required field has a value.
 
@@ -209,7 +208,7 @@ def validate_admin_role(session_state: dict) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_command_input(command: Optional[str]) -> tuple[bool, str]:
+def validate_command_input(command: str | None) -> tuple[bool, str]:
     """
     Validate that a command has been entered.
 

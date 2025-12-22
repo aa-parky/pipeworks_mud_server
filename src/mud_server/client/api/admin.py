@@ -21,7 +21,6 @@ Response Format:
     }
 """
 
-from typing import Optional
 
 from mud_server.client.api.base import BaseAPIClient
 from mud_server.client.ui.validators import (
@@ -50,7 +49,7 @@ class AdminAPIClient(BaseAPIClient):
 
     def get_database_players(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
     ) -> dict:
         """
@@ -160,7 +159,7 @@ class AdminAPIClient(BaseAPIClient):
 
     def get_database_sessions(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
     ) -> dict:
         """
@@ -255,7 +254,7 @@ class AdminAPIClient(BaseAPIClient):
 
     def get_database_chat(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
         limit: int = 50,
     ) -> dict:
@@ -349,7 +348,7 @@ class AdminAPIClient(BaseAPIClient):
 
     def manage_user(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         role: str,
         target_username: str,
         action: str,

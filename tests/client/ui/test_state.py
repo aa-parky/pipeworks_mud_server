@@ -7,8 +7,6 @@ This module tests UI state building functions to ensure:
 - Session state updates are applied correctly
 """
 
-import gradio as gr
-import pytest
 
 from mud_server.client.ui.state import (
     build_logged_in_state,

@@ -10,8 +10,6 @@ This module tests the SettingsAPIClient class, verifying:
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from mud_server.client.api.settings import SettingsAPIClient
 
 

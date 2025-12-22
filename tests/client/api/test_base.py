@@ -10,7 +10,6 @@ This module tests the BaseAPIClient class, verifying:
 
 from unittest.mock import Mock, patch
 
-import pytest
 import requests
 
 from mud_server.client.api.base import BaseAPIClient
