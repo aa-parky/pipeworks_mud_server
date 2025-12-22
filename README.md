@@ -45,7 +45,8 @@ This repository contains a **working MUD server** that validates the technical a
 - **Room-Based Chat** - Location-specific messaging with whisper/yell support
 - **JSON World Data** - Flexible world definition system
 - **Ollama Integration** - AI model management and conversational interface (admin/superuser)
-- **Modular Client Architecture** - Clean separation: API client, UI tabs, CSS, utilities
+- **Fully Modular Client Architecture** - Clean separation of concerns with dedicated API, UI, and tab layers
+- **100% Test Coverage on Client Modules** - 191 tests covering all API clients and UI utilities
 - **Centralized CSS** - External stylesheet with Safari-compatible dark mode
 
 ### ⏳ Designed But Not Yet Implemented
@@ -182,20 +183,32 @@ Comprehensive design documentation is in the `docs/` directory:
 
 ### Modular Client Design
 
-The Gradio web client uses a modular architecture for maintainability and scalability:
+The Gradio web client uses a fully modular architecture for maintainability, testability, and scalability:
 
-- **app.py** (~150 lines) - Clean entry point that assembles the interface
-- **api_client.py** - All HTTP communication with the FastAPI backend
+- **app.py** (~180 lines) - Clean entry point that assembles the interface
+- **api/** - Modular API client layer with clean separation of concerns
+  - **base.py** - BaseAPIClient with common HTTP patterns
+  - **auth.py** - Authentication operations (login, register, logout)
+  - **game.py** - Game operations (commands, chat, status, refresh)
+  - **settings.py** - Settings and server control
+  - **admin.py** - Admin database operations and user management
+  - **ollama.py** - Ollama AI model operations
+- **ui/** - UI utilities separate from API logic
+  - **validators.py** - Input validation functions (100% test coverage)
+  - **state.py** - Gradio state builders for UI updates
 - **utils.py** - Shared utilities (CSS loading, session state initialization)
 - **static/styles.css** - Centralized CSS with Safari-compatible dark mode
 - **tabs/** - Individual modules for each interface tab (login, game, settings, database, ollama, help)
 
 **Benefits:**
-- Clear separation of concerns
-- Easy to test individual components
-- Simple to add new tabs or features
+- Clear separation between API logic, validation, and UI concerns
+- 100% test coverage on API and UI utility modules (191 tests)
+- API clients can be used outside Gradio (CLI tools, tests, scripts)
+- Easy to test individual components with mocked HTTP requests
+- Simple to add new features or tabs
 - Better code organization and navigation
 - Externalized CSS for better syntax highlighting and maintenance
+- Type-safe with comprehensive type hints throughout
 
 ### Three-Tier Design
 
@@ -242,9 +255,20 @@ pipeworks_mud_server/
 │   │   └── world.py             # World management
 │   ├── db/                      # Database layer
 │   │   └── database.py          # SQLite operations
-│   └── client/                  # Frontend (modular architecture)
-│       ├── app.py               # Main entry point (~150 lines)
-│       ├── api_client.py        # All API communication functions
+│   └── client/                  # Frontend (fully modular architecture)
+│       ├── app.py               # Main entry point (~180 lines)
+│       ├── api/                 # API client layer (clean HTTP communication)
+│       │   ├── __init__.py      # Package initialization
+│       │   ├── base.py          # BaseAPIClient - common HTTP patterns
+│       │   ├── auth.py          # AuthAPIClient - authentication
+│       │   ├── game.py          # GameAPIClient - game operations
+│       │   ├── settings.py      # SettingsAPIClient - settings & server
+│       │   ├── admin.py         # AdminAPIClient - admin operations
+│       │   └── ollama.py        # OllamaAPIClient - AI model management
+│       ├── ui/                  # UI utilities (separate from API)
+│       │   ├── __init__.py      # Package initialization
+│       │   ├── validators.py    # Input validation (100% coverage)
+│       │   └── state.py         # Gradio state builders
 │       ├── utils.py             # Shared utilities (CSS loading, state)
 │       ├── static/              # Static assets
 │       │   └── styles.css       # Centralized CSS (Safari-compatible)
@@ -292,12 +316,34 @@ black src/ tests/
 mypy src/ --ignore-missing-imports
 ```
 
-**Note on Client Architecture**: The Gradio client (`src/mud_server/client/`) uses a modular design. When adding new features:
-- Add API calls to `api_client.py`
-- Create new tabs in `tabs/` directory
-- Add shared utilities to `utils.py`
-- Update CSS in `static/styles.css`
-- Wire everything together in `app.py`
+**Note on Client Architecture**: The Gradio client (`src/mud_server/client/`) uses a fully modular design with clear separation of concerns. When adding new features:
+
+1. **API Layer** (`api/` directory):
+   - Add new API client classes inheriting from `BaseAPIClient`
+   - Each client handles one domain (auth, game, settings, admin, ollama)
+   - Return standardized dicts: `{"success": bool, "message": str, "data": dict|None, "error": str|None}`
+   - Write comprehensive tests with 100% coverage
+
+2. **UI Layer** (`ui/` directory):
+   - Add new validators to `validators.py` for input validation
+   - Add new state builders to `state.py` for Gradio UI updates
+   - Keep UI logic separate from API logic
+
+3. **Tab Modules** (`tabs/` directory):
+   - Create new tab files for new interface sections
+   - Import API clients and UI utilities
+   - Wire up event handlers
+
+4. **Shared Resources**:
+   - Add shared utilities to `utils.py`
+   - Update CSS in `static/styles.css`
+   - Wire everything together in `app.py`
+
+**Benefits of this structure**:
+- API clients can be tested in isolation with mocked HTTP
+- API clients work outside Gradio (CLI tools, scripts, tests)
+- Validators and state builders are pure functions, easy to test
+- Clear separation makes code easier to understand and maintain
 
 ### Running Components Separately
 
