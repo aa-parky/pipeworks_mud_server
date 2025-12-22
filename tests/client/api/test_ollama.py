@@ -177,6 +177,7 @@ class TestOllamaAPIClientExecuteCommand:
     def test_execute_command_timeout(self, mock_request):
         """Test command execution handles timeout."""
         import requests
+
         mock_request.side_effect = requests.exceptions.Timeout()
 
         client = OllamaAPIClient()

@@ -7,7 +7,6 @@ This module tests all validation functions to ensure:
 - Edge cases are handled correctly
 """
 
-
 from mud_server.client.ui.validators import (
     validate_admin_role,
     validate_command_input,
@@ -219,11 +218,13 @@ class TestValidateSessionState:
 
     def test_session_with_other_data(self):
         """Test that logged in session with other data passes."""
-        is_valid, error = validate_session_state({
-            "logged_in": True,
-            "username": "alice",
-            "session_id": "abc123",
-        })
+        is_valid, error = validate_session_state(
+            {
+                "logged_in": True,
+                "username": "alice",
+                "session_id": "abc123",
+            }
+        )
         assert is_valid is True
         assert error == ""
 

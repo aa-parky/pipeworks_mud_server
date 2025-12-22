@@ -17,7 +17,6 @@ Common Patterns:
 """
 
 
-
 def validate_username(username: str | None) -> tuple[bool, str]:
     """
     Validate username meets requirements.

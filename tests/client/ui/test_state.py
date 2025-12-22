@@ -7,7 +7,6 @@ This module tests UI state building functions to ensure:
 - Session state updates are applied correctly
 """
 
-
 from mud_server.client.ui.state import (
     build_logged_in_state,
     build_logged_out_state,
@@ -35,10 +34,10 @@ class TestBuildLoggedInState:
 
         # Verify tab visibility (result[4] through result[10])
         # login, register, game, settings, db, ollama, help
-        assert result[4]["visible"] is True   # login tab
+        assert result[4]["visible"] is True  # login tab
         assert result[5]["visible"] is False  # register tab
-        assert result[6]["visible"] is True   # game tab
-        assert result[7]["visible"] is True   # settings tab
+        assert result[6]["visible"] is True  # game tab
+        assert result[7]["visible"] is True  # settings tab
         assert result[8]["visible"] is False  # database tab (no admin)
         assert result[9]["visible"] is False  # ollama tab (no admin)
         assert result[10]["visible"] is True  # help tab
@@ -49,8 +48,8 @@ class TestBuildLoggedInState:
         result = build_logged_in_state(session_state, "Welcome admin", has_admin_access=True)
 
         # Verify admin tabs are visible
-        assert result[8]["visible"] is True   # database tab (admin access)
-        assert result[9]["visible"] is True   # ollama tab (admin access)
+        assert result[8]["visible"] is True  # database tab (admin access)
+        assert result[9]["visible"] is True  # ollama tab (admin access)
 
     def test_superuser_login_state(self):
         """Test UI state for superuser login."""
@@ -58,10 +57,10 @@ class TestBuildLoggedInState:
         result = build_logged_in_state(session_state, "Welcome superuser", has_admin_access=True)
 
         # Verify all tabs visible for superuser
-        assert result[6]["visible"] is True   # game tab
-        assert result[7]["visible"] is True   # settings tab
-        assert result[8]["visible"] is True   # database tab
-        assert result[9]["visible"] is True   # ollama tab
+        assert result[6]["visible"] is True  # game tab
+        assert result[7]["visible"] is True  # settings tab
+        assert result[8]["visible"] is True  # database tab
+        assert result[9]["visible"] is True  # ollama tab
         assert result[10]["visible"] is True  # help tab
 
 
@@ -80,8 +79,8 @@ class TestBuildLoggedOutState:
         assert result[2] == ""  # blank field
 
         # Verify only login/register tabs visible
-        assert result[3]["visible"] is True   # login tab
-        assert result[4]["visible"] is True   # register tab
+        assert result[3]["visible"] is True  # login tab
+        assert result[4]["visible"] is True  # register tab
         assert result[5]["visible"] is False  # game tab
         assert result[6]["visible"] is False  # settings tab
         assert result[7]["visible"] is False  # database tab
@@ -94,8 +93,8 @@ class TestBuildLoggedOutState:
         result = build_logged_out_state(session_state, "Not logged in.")
 
         # Verify same state as logout
-        assert result[3]["visible"] is True   # login tab
-        assert result[4]["visible"] is True   # register tab
+        assert result[3]["visible"] is True  # login tab
+        assert result[4]["visible"] is True  # register tab
         assert result[5]["visible"] is False  # game tab
 
 
@@ -115,8 +114,8 @@ class TestBuildLoginFailedState:
         assert result[3] == ""  # clear password
 
         # Verify only login/register tabs visible
-        assert result[4]["visible"] is True   # login tab
-        assert result[5]["visible"] is True   # register tab
+        assert result[4]["visible"] is True  # login tab
+        assert result[5]["visible"] is True  # register tab
         assert result[6]["visible"] is False  # game tab
         assert result[7]["visible"] is False  # settings tab
         assert result[8]["visible"] is False  # database tab

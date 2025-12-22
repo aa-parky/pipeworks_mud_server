@@ -23,7 +23,6 @@ Response Format:
     }
 """
 
-
 from mud_server.client.api.base import BaseAPIClient
 from mud_server.client.ui.validators import validate_command_input, validate_session_state
 

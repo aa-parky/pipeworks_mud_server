@@ -131,6 +131,7 @@ class TestAuthAPIClientLogin:
     def test_login_connection_error(self, mock_request):
         """Test login with connection error."""
         import requests
+
         mock_request.side_effect = requests.exceptions.ConnectionError()
 
         client = AuthAPIClient()
@@ -239,6 +240,7 @@ class TestAuthAPIClientRegister:
     def test_register_connection_error(self, mock_request):
         """Test registration with connection error."""
         import requests
+
         mock_request.side_effect = requests.exceptions.ConnectionError()
 
         client = AuthAPIClient()
@@ -326,6 +328,7 @@ class TestAuthAPIClientLogout:
     def test_logout_connection_error_still_succeeds(self, mock_request):
         """Test logout succeeds even with connection error."""
         import requests
+
         mock_request.side_effect = requests.exceptions.ConnectionError()
 
         client = AuthAPIClient()

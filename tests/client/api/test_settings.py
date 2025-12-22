@@ -231,6 +231,7 @@ class TestSettingsAPIClientStopServer:
     def test_stop_server_connection_error(self, mock_request):
         """Test server stop handles connection error (server already stopped)."""
         import requests
+
         mock_request.side_effect = requests.exceptions.ConnectionError()
 
         client = SettingsAPIClient()

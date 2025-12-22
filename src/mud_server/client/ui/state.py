@@ -47,13 +47,13 @@ def build_logged_in_state(
         message,
         "",  # clear username field
         "",  # clear password field
-        gr.update(visible=True),   # login tab (keep visible for message)
+        gr.update(visible=True),  # login tab (keep visible for message)
         gr.update(visible=False),  # register tab (hide after login)
-        gr.update(visible=True),   # game tab (show)
-        gr.update(visible=True),   # settings tab (show)
+        gr.update(visible=True),  # game tab (show)
+        gr.update(visible=True),  # settings tab (show)
         gr.update(visible=has_admin_access),  # database tab (admin only)
         gr.update(visible=has_admin_access),  # ollama tab (admin only)
-        gr.update(visible=True),   # help tab (show)
+        gr.update(visible=True),  # help tab (show)
     )
 
 
@@ -81,8 +81,8 @@ def build_logged_out_state(
         session_state,
         message,
         "",  # blank field for consistency with some functions
-        gr.update(visible=True),   # login tab (show)
-        gr.update(visible=True),   # register tab (show)
+        gr.update(visible=True),  # login tab (show)
+        gr.update(visible=True),  # register tab (show)
         gr.update(visible=False),  # game tab (hide)
         gr.update(visible=False),  # settings tab (hide)
         gr.update(visible=False),  # database tab (hide)
@@ -118,8 +118,8 @@ def build_login_failed_state(
         error_message,
         "",  # preserve username (don't clear)
         "",  # clear password field
-        gr.update(visible=True),   # login tab (show)
-        gr.update(visible=True),   # register tab (show)
+        gr.update(visible=True),  # login tab (show)
+        gr.update(visible=True),  # register tab (show)
         gr.update(visible=False),  # game tab (hide)
         gr.update(visible=False),  # settings tab (hide)
         gr.update(visible=False),  # database tab (hide)

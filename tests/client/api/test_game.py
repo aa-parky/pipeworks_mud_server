@@ -288,6 +288,7 @@ class TestGameAPIClientRefreshDisplay:
     @patch("mud_server.client.api.base.requests.request")
     def test_successful_refresh(self, mock_request):
         """Test successful display refresh."""
+
         # Mock both look command and chat retrieval
         def mock_response_func(*args, **kwargs):
             response = Mock()
@@ -327,6 +328,7 @@ class TestGameAPIClientRefreshDisplay:
     @patch("mud_server.client.api.base.requests.request")
     def test_refresh_room_error(self, mock_request):
         """Test refresh handles room retrieval error."""
+
         def mock_response_func(*args, **kwargs):
             response = Mock()
 
@@ -351,6 +353,7 @@ class TestGameAPIClientRefreshDisplay:
     @patch("mud_server.client.api.base.requests.request")
     def test_refresh_chat_error(self, mock_request):
         """Test refresh handles chat retrieval error."""
+
         def mock_response_func(*args, **kwargs):
             response = Mock()
 
